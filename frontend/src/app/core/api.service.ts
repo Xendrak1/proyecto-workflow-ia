@@ -146,6 +146,19 @@ export class ApiService {
     return this.http.post<ApiResponse<TaskFormFillSuggestion>>(`${this.baseUrl}/ai/task-form-fill`, payload);
   }
 
+  generateTaskFormFillLocal(payload: {
+    report_text: string;
+    task_title?: string | null;
+    node_name?: string | null;
+    lane?: string | null;
+    procedure_type?: string | null;
+    applicant_name?: string | null;
+    applicant_document?: string | null;
+    fields: Array<{ key: string; label: string; field_type: string; required: boolean; options: string[] }>;
+  }): Observable<ApiResponse<TaskFormFillSuggestion>> {
+    return this.http.post<ApiResponse<TaskFormFillSuggestion>>(`${this.baseUrl}/ai/task-form-fill-local`, payload);
+  }
+
   generateTaskFormFillFromAudio(payload: {
     audio_base64: string;
     mime_type: string;

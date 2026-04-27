@@ -8,6 +8,7 @@ from app.models.ai import (
 )
 from app.services.ai_service import (
     generate_task_form_fill,
+    generate_task_form_fill_local,
     generate_task_form_fill_from_audio,
     generate_workflow_suggestion,
     generate_workflow_suggestion_from_audio,
@@ -33,6 +34,12 @@ def workflow_suggestion_audio(payload: WorkflowAudioSuggestionRequest) -> dict:
 def task_form_fill(payload: TaskFormFillRequest) -> dict:
     suggestion = generate_task_form_fill(payload)
     return {"message": "Formulario completado con IA", "data": suggestion.model_dump()}
+
+
+@router.post("/task-form-fill-local")
+def task_form_fill_local(payload: TaskFormFillRequest) -> dict:
+    suggestion = generate_task_form_fill_local(payload)
+    return {"message": "Formulario completado desde el texto actual", "data": suggestion.model_dump()}
 
 
 @router.post("/task-form-fill-audio")

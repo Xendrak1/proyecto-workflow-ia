@@ -186,6 +186,38 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  async extractAiFillLocally(): Promise<void> {
+    const reportText = this.aiForm.getRawValue().report_text?.trim() ?? '';
+    if (!reportText || !this.task() || !this.currentNode()) {
+      this.aiForm.markAllAsTouched();
+      return;
+    }
+    this.aiLoading.set(true);
+    this.aiError.set(null);
+    this.aiSuggestion.set(null);
+    this.aiStatus.set('Extrayendo datos del texto actual sin usar Gemini...');
+    try {
+      const response = await firstValueFrom(
+        this.api.generateTaskFormFillLocal({
+          report_text: reportText,
+          ...this.buildAiTaskContext()
+        })
+      );
+      this.aiSuggestion.set(response.data);
+      this.aiStatus.set('Se extrajo una propuesta directa desde el texto actual.');
+      this.aiError.set(null);
+    } catch (error) {
+      const message =
+        error instanceof HttpErrorResponse
+          ? error.error?.detail ?? error.message ?? 'Error desconocido'
+          : 'Error desconocido';
+      this.aiError.set(message);
+      this.aiStatus.set('No se pudo extraer información desde el texto actual.');
+    } finally {
+      this.aiLoading.set(false);
+    }
+  }
+
   applyAiFill(): void {
     const suggestion = this.aiSuggestion();
     if (!suggestion) return;

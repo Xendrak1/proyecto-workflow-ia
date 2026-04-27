@@ -247,6 +247,15 @@ def generate_task_form_fill(payload: TaskFormFillRequest) -> TaskFormFillRespons
         return fallback
 
 
+def generate_task_form_fill_local(payload: TaskFormFillRequest) -> TaskFormFillResponse:
+    fallback = _fallback_task_form_fill(payload)
+    fallback.source = "local-heuristic"
+    fallback.model = "local-parser"
+    fallback.summary = "Se extrajeron datos directamente del texto actual sin usar Gemini."
+    fallback.observations = "El sistema aplico reglas locales sobre el texto escrito o dictado para completar el formulario."
+    return fallback
+
+
 def generate_task_form_fill_from_audio(payload: TaskFormFillAudioRequest) -> TaskFormFillResponse:
     try:
         raw = _request_gemini(
