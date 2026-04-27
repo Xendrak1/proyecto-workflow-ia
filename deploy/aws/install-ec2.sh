@@ -43,6 +43,9 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo mkdir -p "$ROOT_DIR/backend/uploads"
 sudo chown -R ubuntu:www-data "$ROOT_DIR/backend/uploads"
 sudo chmod -R 775 "$ROOT_DIR/backend/uploads"
+sudo chmod 755 "$HOME" "$ROOT_DIR" "$ROOT_DIR/frontend"
+find "$ROOT_DIR/frontend/dist" -type d -exec chmod 755 {} +
+find "$ROOT_DIR/frontend/dist" -type f -exec chmod 644 {} +
 
 echo "==> Recargando servicios"
 sudo systemctl daemon-reload
