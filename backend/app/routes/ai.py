@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.models.ai import (
     TaskFormFillAudioRequest,
     TaskFormFillRequest,
+    TranscribeAudioRequest,
     WorkflowAudioSuggestionRequest,
     WorkflowSuggestionRequest,
 )
@@ -12,10 +13,17 @@ from app.services.ai_service import (
     generate_task_form_fill_from_audio,
     generate_workflow_suggestion,
     generate_workflow_suggestion_from_audio,
+    transcribe_audio_vosk,
 )
 
 
 router = APIRouter()
+
+
+@router.post("/transcribe-audio")
+def transcribe_audio(payload: TranscribeAudioRequest) -> dict:
+    result = transcribe_audio_vosk(payload.audio_base64, payload.mime_type)
+    return {"transcript": result.transcript, "source": result.source}
 
 
 @router.post("/workflow-suggestion")

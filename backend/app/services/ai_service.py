@@ -1,5 +1,11 @@
+import base64
+import io
 import json
+import os
 import re
+import subprocess
+import threading
+import zipfile
 from urllib import error, parse, request
 
 from fastapi import HTTPException
@@ -9,10 +15,115 @@ from app.models.ai import (
     TaskFormFillAudioRequest,
     TaskFormFillRequest,
     TaskFormFillResponse,
+    TranscribeAudioResponse,
     WorkflowAudioSuggestionRequest,
     WorkflowSuggestionRequest,
     WorkflowSuggestionResponse,
 )
+
+# ---------------------------------------------------------------------------
+# Vosk transcription (offline, free, no API key)
+# ---------------------------------------------------------------------------
+
+_VOSK_MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "vosk_model")
+_VOSK_MODEL_NAME = "vosk-model-small-es-0.42"
+_VOSK_MODEL_URL = f"https://alphacephei.com/vosk/models/{_VOSK_MODEL_NAME}.zip"
+
+_vosk_model_instance = None
+_vosk_model_lock = threading.Lock()
+
+
+def _ensure_vosk_model() -> str:
+    model_path = os.path.join(_VOSK_MODEL_DIR, _VOSK_MODEL_NAME)
+    if not os.path.isdir(model_path):
+        os.makedirs(_VOSK_MODEL_DIR, exist_ok=True)
+        zip_path = os.path.join(_VOSK_MODEL_DIR, "model.zip")
+        try:
+            req = request.Request(_VOSK_MODEL_URL, headers={"User-Agent": "Mozilla/5.0"})
+            with request.urlopen(req, timeout=120) as resp, open(zip_path, "wb") as f:
+                f.write(resp.read())
+            with zipfile.ZipFile(zip_path, "r") as z:
+                z.extractall(_VOSK_MODEL_DIR)
+        finally:
+            if os.path.exists(zip_path):
+                os.unlink(zip_path)
+    return model_path
+
+
+def _get_vosk_model():
+    global _vosk_model_instance
+    if _vosk_model_instance is None:
+        with _vosk_model_lock:
+            if _vosk_model_instance is None:
+                try:
+                    from vosk import Model, SetLogLevel  # type: ignore[import]
+                    SetLogLevel(-1)
+                    _vosk_model_instance = Model(_ensure_vosk_model())
+                except ImportError as exc:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="El paquete vosk no está instalado. Ejecuta pip install vosk en el servidor.",
+                    ) from exc
+    return _vosk_model_instance
+
+
+def _audio_to_wav_pcm(audio_bytes: bytes) -> bytes:
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "wav", "pipe:1", "-loglevel", "quiet"],
+            input=audio_bytes,
+            capture_output=True,
+            timeout=30,
+        )
+        if not proc.stdout:
+            raise HTTPException(
+                status_code=422,
+                detail="No se pudo convertir el audio. Asegúrate de haber grabado algo con el micrófono.",
+            )
+        return proc.stdout
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg no está instalado en el servidor. Ejecuta: sudo apt install ffmpeg",
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="El audio tardó demasiado en convertirse.") from exc
+
+
+def transcribe_audio_vosk(audio_base64: str, mime_type: str) -> TranscribeAudioResponse:
+    try:
+        from vosk import KaldiRecognizer  # type: ignore[import]
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="El paquete vosk no está instalado. Ejecuta pip install vosk en el servidor.",
+        ) from exc
+
+    audio_bytes = base64.b64decode(audio_base64)
+    wav_bytes = _audio_to_wav_pcm(audio_bytes)
+
+    model = _get_vosk_model()
+    rec = KaldiRecognizer(model, 16000)
+    rec.SetWords(False)
+
+    wav_io = io.BytesIO(wav_bytes)
+    wav_io.seek(44)  # skip WAV header
+    while True:
+        chunk = wav_io.read(4000)
+        if not chunk:
+            break
+        rec.AcceptWaveform(chunk)
+
+    result = json.loads(rec.FinalResult())
+    transcript = result.get("text", "").strip()
+
+    if not transcript:
+        raise HTTPException(
+            status_code=422,
+            detail="No se reconoció texto en el audio. Habla con claridad y cerca del micrófono.",
+        )
+
+    return TranscribeAudioResponse(transcript=transcript, source="vosk")
 
 
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"

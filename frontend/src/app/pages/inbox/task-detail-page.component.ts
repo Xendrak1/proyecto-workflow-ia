@@ -485,29 +485,25 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
     }
     this.aiLoading.set(true);
     this.aiError.set(null);
-    this.aiStatus.set('Gemini está escuchando el audio cargado y preparando el formulario...');
+    this.aiStatus.set('Transcribiendo el archivo de audio...');
     try {
       const response = await firstValueFrom(
-        this.api.generateTaskFormFillFromAudio({
+        this.api.transcribeAudio({
           audio_base64: await this.blobToBase64(file),
           mime_type: file.type || 'audio/webm',
-          ...this.buildAiTaskContext()
         })
       );
-      this.aiSuggestion.set(response.data);
-      if (response.data.transcript) {
-        this.aiForm.patchValue({ report_text: response.data.transcript });
-      }
+      this.aiForm.patchValue({ report_text: response.transcript });
       this.aiLiveTranscript.set('');
-      this.aiStatus.set('La IA preparó una propuesta a partir del archivo de audio.');
-      this.aiError.set(this.describeAiSource(response.data.source));
+      this.aiStatus.set('Transcripción lista. Revisa el texto y usa "Generar" o "Extraer del texto" para completar el formulario.');
+      this.aiError.set(null);
     } catch (error) {
       const message =
         error instanceof HttpErrorResponse
           ? error.error?.detail ?? error.message ?? 'Error desconocido'
           : 'Error desconocido';
       this.aiError.set(message);
-      this.aiStatus.set('No se pudo procesar el archivo de audio con IA.');
+      this.aiStatus.set('No se pudo transcribir el archivo de audio.');
     } finally {
       this.aiLoading.set(false);
     }
@@ -520,29 +516,26 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       return;
     }
     this.aiLoading.set(true);
-    this.aiStatus.set('Gemini está escuchando el audio y armando el llenado...');
+    this.aiError.set(null);
+    this.aiStatus.set('Transcribiendo audio con Vosk...');
     try {
       const response = await firstValueFrom(
-        this.api.generateTaskFormFillFromAudio({
+        this.api.transcribeAudio({
           audio_base64: await this.blobToBase64(blob),
           mime_type: mimeType,
-          ...this.buildAiTaskContext()
         })
       );
-      this.aiSuggestion.set(response.data);
-      if (response.data.transcript) {
-        this.aiForm.patchValue({ report_text: response.data.transcript });
-      }
+      this.aiForm.patchValue({ report_text: response.transcript });
       this.aiLiveTranscript.set('');
-      this.aiStatus.set('La IA preparó una propuesta a partir del audio.');
-      this.aiError.set(this.describeAiSource(response.data.source));
+      this.aiStatus.set('Transcripción lista. Revisa el texto y usa "Generar" o "Extraer del texto" para completar el formulario.');
+      this.aiError.set(null);
     } catch (error) {
       const message =
         error instanceof HttpErrorResponse
           ? error.error?.detail ?? error.message ?? 'Error desconocido'
           : 'Error desconocido';
       this.aiError.set(message);
-      this.aiStatus.set('No se pudo procesar el audio con IA.');
+      this.aiStatus.set('No se pudo transcribir el audio.');
     } finally {
       this.aiLoading.set(false);
       this.aiRecording.set(false);

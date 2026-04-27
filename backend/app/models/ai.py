@@ -82,3 +82,13 @@ class TaskFormFillResponse(BaseModel):
     summary: str
     form_data: dict = Field(default_factory=dict)
     observations: str | None = None
+
+
+class TranscribeAudioRequest(BaseModel):
+    audio_base64: str = Field(min_length=16)
+    mime_type: str = Field(default="audio/webm")
+
+
+class TranscribeAudioResponse(BaseModel):
+    transcript: str
+    source: str = "vosk"

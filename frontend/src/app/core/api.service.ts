@@ -123,6 +123,10 @@ export class ApiService {
     return this.http.post<ApiResponse<WorkflowSuggestion>>(`${this.baseUrl}/ai/workflow-suggestion`, payload);
   }
 
+  transcribeAudio(payload: { audio_base64: string; mime_type: string }): Observable<{ transcript: string; source: string }> {
+    return this.http.post<{ transcript: string; source: string }>(`${this.baseUrl}/ai/transcribe-audio`, payload);
+  }
+
   generateWorkflowSuggestionFromAudio(payload: {
     audio_base64: string;
     mime_type: string;

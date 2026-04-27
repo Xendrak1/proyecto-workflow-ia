@@ -1225,41 +1225,24 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       return;
     }
 
-    const policy = this.policy();
     this.aiGenerating.set(true);
     try {
       const audioBase64 = await this.blobToBase64(blob);
       const response = await firstValueFrom(
-        this.api.generateWorkflowSuggestionFromAudio({
-          audio_base64: audioBase64,
-          mime_type: mimeType,
-          policy_name: policy?.name ?? null,
-          procedure_type: policy?.procedure_type ?? null,
-          policy_description: policy?.description ?? null,
-        })
+        this.api.transcribeAudio({ audio_base64: audioBase64, mime_type: mimeType })
       );
-      this.aiSuggestion.set(this.normalizeSuggestionToKnownLanes(response.data));
-      if (response.data.transcript) {
-        this.aiForm.patchValue({ prompt: response.data.transcript });
-      }
-      const sourceLabel = response.data.source === 'fallback-audio' ? 'respaldo de audio' : 'Gemini audio';
-      this.aiStatus.set(`${sourceLabel} generó una propuesta desde la grabacion.`);
-      if (response.data.source?.startsWith('fallback')) {
-        this.aiErrorDetail.set('La IA de audio no devolvio una estructura perfecta y se uso una propuesta base.');
-        this.pushAiHistory('voice', 'fallback', response.data.title, response.data.transcript || response.data.summary);
-      } else {
-        this.aiErrorDetail.set(null);
-        this.pushAiHistory('voice', 'success', response.data.title, response.data.transcript || response.data.summary);
-      }
+      this.aiForm.patchValue({ prompt: response.transcript });
+      this.aiStatus.set('Transcripcion lista. Revisa el texto y luego genera la propuesta de flujo.');
+      this.aiErrorDetail.set(null);
+      this.pushAiHistory('voice', 'success', 'Voz transcripta', response.transcript);
     } catch (error) {
       const message =
         error instanceof HttpErrorResponse
           ? error.error?.detail ?? error.message ?? 'Error desconocido'
           : 'Error desconocido';
-      this.aiSuggestion.set(null);
-      this.aiStatus.set('No se pudo procesar el audio con Gemini.');
+      this.aiStatus.set('No se pudo transcribir el audio.');
       this.aiErrorDetail.set(message);
-      this.pushAiHistory('voice', 'error', 'Error al procesar audio', message);
+      this.pushAiHistory('voice', 'error', 'Error al transcribir audio', message);
     } finally {
       this.aiGenerating.set(false);
       this.aiRecording.set(false);
