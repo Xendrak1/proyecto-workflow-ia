@@ -223,6 +223,13 @@
   flex-wrap: wrap;
 }
 
+.audio-upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .ai-preview {
   display: grid;
   gap: 10px;
@@ -301,6 +308,7 @@
     grid-template-columns: 1fr;
   }
 
+  .audio-upload,
   .evidence-upload {
     grid-template-columns: 1fr;
   }

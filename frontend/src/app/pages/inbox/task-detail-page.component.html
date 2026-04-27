@@ -236,6 +236,16 @@
             </div>
           </form>
 
+          <div class="audio-upload">
+            <label class="file-picker">
+              <input type="file" accept="audio/*,.webm,.wav,.mp3,.m4a,.ogg" (change)="onAudioPicked($event)" />
+              <span>{{ selectedAudioName() || 'Seleccionar audio grabado' }}</span>
+            </label>
+            <button type="button" class="btn sm" (click)="submitAudioFile()" [disabled]="aiLoading() || saving()">
+              <app-icon name="upload" [size]="14" /> Procesar audio
+            </button>
+          </div>
+
           <div class="ai-preview" *ngIf="aiSuggestion() as suggestion">
             <p class="muted tiny">{{ suggestion.summary }}</p>
             <p class="muted tiny" *ngIf="suggestion.transcript">

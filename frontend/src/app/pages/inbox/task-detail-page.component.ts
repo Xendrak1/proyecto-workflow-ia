@@ -48,6 +48,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   readonly uploadingEvidence = signal(false);
   readonly selectedEvidenceName = signal('');
   readonly evidenceNote = signal('');
+  readonly selectedAudioName = signal('');
   readonly voiceSupported = signal(this.detectVoiceSupport());
   readonly recordingSupported = signal(typeof MediaRecorder !== 'undefined' && typeof navigator !== 'undefined');
   readonly canUseVoice = computed(() => this.voiceSupported() || this.recordingSupported());
@@ -68,6 +69,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private selectedEvidenceFile: File | null = null;
+  private selectedAudioFile: File | null = null;
   private readonly fileBaseUrl = this.api.fileBaseUrl;
 
   ngOnInit(): void {
@@ -191,7 +193,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       (window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition ||
       (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
     if (!Ctor) {
-      this.aiError.set('Este navegador no expone captura de voz en esta pantalla.');
+      this.aiError.set('Este navegador no permite capturar voz en esta pantalla. Puedes subir un audio grabado y la IA lo procesará igual.');
       return;
     }
     const recognition = new (Ctor as new () => {
@@ -336,7 +338,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      this.aiError.set('Tu navegador no permite grabar audio desde esta pantalla.');
+      this.aiError.set('Tu navegador no permite usar el micrófono en esta página. Sube un archivo de audio como alternativa.');
       return;
     }
 
@@ -358,7 +360,57 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       this.aiError.set(null);
       this.aiStatus.set('Grabando audio para llenar el formulario con IA...');
     } catch {
-      this.aiError.set('No se pudo acceder al micrófono.');
+      this.aiError.set('No se pudo acceder al micrófono. Prueba con un archivo de audio.');
+    }
+  }
+
+  onAudioPicked(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.selectedAudioFile = file;
+    this.selectedAudioName.set(file?.name ?? '');
+    if (file) {
+      this.aiError.set(null);
+      this.aiStatus.set('Audio cargado. Ahora puedes enviarlo a la IA.');
+    }
+  }
+
+  async submitAudioFile(): Promise<void> {
+    const file = this.selectedAudioFile;
+    if (!file) {
+      this.aiError.set('Selecciona un archivo de audio antes de enviarlo.');
+      return;
+    }
+    this.aiLoading.set(true);
+    this.aiError.set(null);
+    this.aiStatus.set('Gemini está escuchando el audio cargado y preparando el formulario...');
+    try {
+      const response = await firstValueFrom(
+        this.api.generateTaskFormFillFromAudio({
+          audio_base64: await this.blobToBase64(file),
+          mime_type: file.type || 'audio/webm',
+          ...this.buildAiTaskContext()
+        })
+      );
+      this.aiSuggestion.set(response.data);
+      if (response.data.transcript) {
+        this.aiForm.patchValue({ report_text: response.data.transcript });
+      }
+      this.aiStatus.set('La IA preparó una propuesta a partir del archivo de audio.');
+      this.aiError.set(
+        response.data.source?.startsWith('fallback')
+          ? 'Gemini no devolvió una estructura perfecta y se usó una propuesta base revisable.'
+          : null
+      );
+    } catch (error) {
+      const message =
+        error instanceof HttpErrorResponse
+          ? error.error?.detail ?? error.message ?? 'Error desconocido'
+          : 'Error desconocido';
+      this.aiError.set(message);
+      this.aiStatus.set('No se pudo procesar el archivo de audio con IA.');
+    } finally {
+      this.aiLoading.set(false);
     }
   }
 

@@ -9,6 +9,7 @@ import { ToastService } from '../../core/toast.service';
 import { IconComponent } from '../../shared/icon.component';
 
 type FilterMode = 'mine' | 'department' | 'all';
+type StatusFilter = 'all' | 'pendiente' | 'en_proceso' | 'observada' | 'completada';
 
 @Component({
   selector: 'app-inbox-page',
@@ -26,6 +27,7 @@ export class InboxPageComponent implements OnDestroy {
   readonly tasks = signal<Task[]>([]);
   readonly loading = signal(true);
   readonly filter = signal<FilterMode>(this.session.isFuncionario() ? 'department' : 'all');
+  readonly statusFilter = signal<StatusFilter>('all');
   readonly autoRefresh = signal(true);
   readonly lastRefreshed = signal<Date | null>(null);
 
@@ -37,12 +39,16 @@ export class InboxPageComponent implements OnDestroy {
     const department = this.session.department();
     const userId = this.session.userId();
 
-    if (mode === 'all') return all;
-    if (mode === 'mine') return all.filter((task) => task.assigned_user_id && task.assigned_user_id === userId);
-    if (mode === 'department' && department) {
-      return all.filter((task) => (task.assigned_department ?? '').toLowerCase() === department.toLowerCase());
+    let filtered = all;
+    if (mode === 'mine') {
+      filtered = all.filter((task) => task.assigned_user_id && task.assigned_user_id === userId);
+    } else if (mode === 'department' && department) {
+      filtered = all.filter((task) => (task.assigned_department ?? '').toLowerCase() === department.toLowerCase());
     }
-    return all;
+
+    const status = this.statusFilter();
+    if (status === 'all') return filtered;
+    return filtered.filter((task) => task.status === status);
   });
 
   readonly columns = computed(() => {
@@ -91,6 +97,10 @@ export class InboxPageComponent implements OnDestroy {
     this.filter.set(mode);
   }
 
+  setStatusFilter(status: StatusFilter): void {
+    this.statusFilter.set(status);
+  }
+
   toggleAutoRefresh(): void {
     this.autoRefresh.update((value) => !value);
     if (this.autoRefresh()) this.startPolling();
@@ -100,6 +110,14 @@ export class InboxPageComponent implements OnDestroy {
   openTask(task: Task): void {
     if (!task._id) return;
     this.router.navigate(['/app/inbox', task._id]);
+  }
+
+  openFirstInStatus(status: Exclude<StatusFilter, 'all'>): void {
+    this.statusFilter.set(status);
+    const task = this.columns()[status][0];
+    if (task) {
+      this.openTask(task);
+    }
   }
 
   completeTaskQuick(event: Event, task: Task): void {

@@ -89,6 +89,22 @@
   width: max-content;
 }
 
+.badge-action {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  transition: transform 120ms var(--ease), box-shadow 120ms var(--ease), opacity 120ms var(--ease);
+}
+
+.badge-action:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-xs);
+}
+
+.badge-action.active {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+}
+
 .meter.live strong {
   font-size: 18px;
   font-variant-numeric: tabular-nums;

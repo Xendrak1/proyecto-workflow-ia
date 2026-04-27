@@ -40,22 +40,50 @@
     <article class="meter">
       <span>Pendientes</span>
       <strong>{{ stats().pendientes }}</strong>
-      <small class="badge danger dot">Atender ahora</small>
+      <button
+        type="button"
+        class="badge danger dot badge-action"
+        [class.active]="statusFilter() === 'pendiente'"
+        (click)="openFirstInStatus('pendiente')"
+      >
+        Atender ahora
+      </button>
     </article>
     <article class="meter">
       <span>En proceso</span>
       <strong>{{ stats().enProceso }}</strong>
-      <small class="badge warn dot">Trabajando</small>
+      <button
+        type="button"
+        class="badge warn dot badge-action"
+        [class.active]="statusFilter() === 'en_proceso'"
+        (click)="openFirstInStatus('en_proceso')"
+      >
+        Trabajando
+      </button>
     </article>
     <article class="meter">
       <span>Observadas</span>
       <strong>{{ stats().observadas }}</strong>
-      <small class="badge violet dot">Requieren revisión</small>
+      <button
+        type="button"
+        class="badge violet dot badge-action"
+        [class.active]="statusFilter() === 'observada'"
+        (click)="openFirstInStatus('observada')"
+      >
+        Requieren revisión
+      </button>
     </article>
     <article class="meter">
       <span>Completadas</span>
       <strong>{{ stats().completadas }}</strong>
-      <small class="badge success dot">Cerradas</small>
+      <button
+        type="button"
+        class="badge success dot badge-action"
+        [class.active]="statusFilter() === 'completada'"
+        (click)="openFirstInStatus('completada')"
+      >
+        Cerradas
+      </button>
     </article>
     <article class="meter live" *ngIf="lastRefreshed()">
       <span>Última actualización</span>
@@ -84,7 +112,7 @@
               <span class="badge neutral">{{ task.assigned_role || '—' }}</span>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn sm">
+              <button type="button" class="btn sm" (click)="openTask(task)">
                 <app-icon name="edit" [size]="14" /> Atender
               </button>
               <button type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
@@ -123,7 +151,7 @@
               <span class="badge neutral">{{ task.assigned_department || 'Sin área' }}</span>
             </div>
             <div class="card-actions">
-              <button type="button" class="btn sm">
+              <button type="button" class="btn sm" (click)="openTask(task)">
                 <app-icon name="edit" [size]="14" /> Continuar
               </button>
               <button type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
