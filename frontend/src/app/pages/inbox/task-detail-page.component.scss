@@ -223,6 +223,23 @@
   flex-wrap: wrap;
 }
 
+.live-transcript {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(99, 102, 241, 0.24);
+  background: rgba(99, 102, 241, 0.06);
+
+  strong {
+    font-size: 13px;
+  }
+
+  p {
+    min-height: 18px;
+  }
+}
+
 .audio-upload {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

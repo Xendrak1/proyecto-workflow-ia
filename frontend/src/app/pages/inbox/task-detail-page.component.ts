@@ -44,6 +44,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   readonly aiLoading = signal(false);
   readonly aiListening = signal(false);
   readonly aiRecording = signal(false);
+  readonly aiLiveTranscript = signal('');
   readonly aiSuggestion = signal<TaskFormFillSuggestion | null>(null);
   readonly uploadingEvidence = signal(false);
   readonly selectedEvidenceName = signal('');
@@ -67,16 +68,32 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   });
 
   private mediaRecorder: MediaRecorder | null = null;
+  private speechRecognition:
+    | {
+        lang: string;
+        interimResults: boolean;
+        continuous: boolean;
+        maxAlternatives: number;
+        start(): void;
+        stop(): void;
+        onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string; isFinal?: boolean }>> }) => void) | null;
+        onerror: ((event: { error: string }) => void) | null;
+        onend: (() => void) | null;
+      }
+    | null = null;
   private audioChunks: Blob[] = [];
   private selectedEvidenceFile: File | null = null;
   private selectedAudioFile: File | null = null;
   private readonly fileBaseUrl = this.api.fileBaseUrl;
+  private speechBaseText = '';
+  private speechFinalText = '';
 
   ngOnInit(): void {
     this.loadAll();
   }
 
   ngOnDestroy(): void {
+    this.speechRecognition?.stop();
     this.mediaRecorder?.stream?.getTracks().forEach((track) => track.stop());
   }
 
@@ -185,46 +202,101 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   }
 
   toggleVoice(): void {
+    if (this.voiceSupported()) {
+      this.toggleSpeechDictation();
+      return;
+    }
     if (this.recordingSupported()) {
       void this.toggleAudioRecording();
       return;
     }
+    this.aiError.set('Este navegador no permite usar dictado ni grabación directa en esta pantalla. Puedes subir un audio grabado y la IA lo procesará igual.');
+  }
+
+  private toggleSpeechDictation(): void {
+    if (this.aiListening() && this.speechRecognition) {
+      this.aiStatus.set('Deteniendo dictado...');
+      this.speechRecognition.stop();
+      return;
+    }
+
     const Ctor =
       (window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition ||
       (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+
     if (!Ctor) {
-      this.aiError.set('Este navegador no permite capturar voz en esta pantalla. Puedes subir un audio grabado y la IA lo procesará igual.');
+      this.aiError.set('Este navegador no expone el dictado en vivo. Puedes usar grabación de audio o subir un archivo.');
       return;
     }
+
     const recognition = new (Ctor as new () => {
       lang: string;
       interimResults: boolean;
+      continuous: boolean;
       maxAlternatives: number;
       start(): void;
       stop(): void;
-      onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+      onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string; isFinal?: boolean }>> }) => void) | null;
       onerror: ((event: { error: string }) => void) | null;
       onend: (() => void) | null;
     })();
+
+    this.speechRecognition = recognition;
+    this.speechBaseText = this.aiForm.getRawValue().report_text?.trim() ?? '';
+    this.speechFinalText = '';
+    this.aiLiveTranscript.set('');
+    this.aiError.set(null);
+
     recognition.lang = 'es-BO';
-    recognition.interimResults = false;
+    recognition.interimResults = true;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
+
     recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript?.trim() ?? '';
-      if (transcript) {
-        this.aiForm.patchValue({ report_text: transcript });
-        this.aiStatus.set('Voz capturada. Ahora puedes generar el llenado con IA.');
-        this.aiError.set(null);
+      let finalChunk = '';
+      let interimChunk = '';
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index] as unknown as { 0?: { transcript?: string }; isFinal?: boolean };
+        const transcript = result?.[0]?.transcript?.trim() ?? '';
+        if (!transcript) continue;
+        if (result.isFinal) {
+          finalChunk += `${transcript} `;
+        } else {
+          interimChunk += `${transcript} `;
+        }
       }
-      this.aiListening.set(false);
+
+      this.speechFinalText = `${this.speechFinalText} ${finalChunk}`.trim();
+      const finalized = `${this.speechBaseText} ${this.speechFinalText}`.trim();
+      const live = `${finalized} ${interimChunk}`.trim();
+
+      this.aiLiveTranscript.set(interimChunk.trim());
+      this.aiForm.patchValue({ report_text: live || finalized || this.speechBaseText });
+      this.aiStatus.set(interimChunk.trim() ? 'Escuchando y escribiendo en vivo...' : 'Voz capturada. Sigue hablando o detén el dictado cuando termines.');
     };
+
     recognition.onerror = (event) => {
-      this.aiError.set(`No se pudo capturar voz: ${event.error}.`);
+      this.aiError.set(`No se pudo capturar voz: ${event.error}. Si quieres, usa grabación de audio o sube un archivo.`);
       this.aiListening.set(false);
+      this.aiLiveTranscript.set('');
+      this.speechRecognition = null;
     };
-    recognition.onend = () => this.aiListening.set(false);
+
+    recognition.onend = () => {
+      const finalText = this.aiForm.getRawValue().report_text?.trim() ?? '';
+      this.aiListening.set(false);
+      this.aiLiveTranscript.set('');
+      this.speechRecognition = null;
+      this.aiStatus.set(
+        finalText
+          ? 'Dictado finalizado. Revisa el texto y, si está bien, genera el llenado.'
+          : 'No se capturó texto útil. Puedes intentarlo otra vez o subir un audio.'
+      );
+    };
+
     this.aiListening.set(true);
-    this.aiStatus.set('Escuchando informe de voz...');
+    this.aiStatus.set('Escuchando y escribiendo en vivo...');
     recognition.start();
   }
 
@@ -396,6 +468,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       if (response.data.transcript) {
         this.aiForm.patchValue({ report_text: response.data.transcript });
       }
+      this.aiLiveTranscript.set('');
       this.aiStatus.set('La IA preparó una propuesta a partir del archivo de audio.');
       this.aiError.set(
         response.data.source?.startsWith('fallback')
@@ -434,6 +507,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       if (response.data.transcript) {
         this.aiForm.patchValue({ report_text: response.data.transcript });
       }
+      this.aiLiveTranscript.set('');
       this.aiStatus.set('La IA preparó una propuesta a partir del audio.');
       this.aiError.set(
         response.data.source?.startsWith('fallback')

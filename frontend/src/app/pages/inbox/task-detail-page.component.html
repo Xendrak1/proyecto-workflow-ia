@@ -212,6 +212,13 @@
               formControlName="report_text"
               placeholder="Ej. El técnico visitó el domicilio, verificó la acometida, confirmó viabilidad y dejó observación sobre el poste más cercano..."
             ></textarea>
+            <div class="live-transcript" *ngIf="aiListening() || aiLiveTranscript()">
+              <span class="eyebrow">Dictado en vivo</span>
+              <strong>{{ aiListening() ? 'Escuchando ahora' : 'Ultimo fragmento capturado' }}</strong>
+              <p class="muted tiny">
+                {{ aiLiveTranscript() || 'El texto aparecerá aquí mientras hablas.' }}
+              </p>
+            </div>
             <div class="ai-actions">
               <button type="submit" class="btn primary sm" [disabled]="aiLoading() || saving()">
                 <app-icon name="sparkles" [size]="14" /> Generar llenado
