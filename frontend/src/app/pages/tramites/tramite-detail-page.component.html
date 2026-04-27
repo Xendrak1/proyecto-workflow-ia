@@ -1,0 +1,107 @@
+<section class="page" *ngIf="tramite() as tramite; else loadingTpl">
+  <header class="page-head">
+    <div class="head-left">
+      <button type="button" class="btn ghost sm" (click)="back()">
+        <app-icon name="arrowLeft" [size]="14" /> Trámites
+      </button>
+      <div>
+        <span class="eyebrow">{{ tramite.procedure_type }}</span>
+        <h1 class="mono">{{ tramite.code }}</h1>
+        <p class="muted">{{ tramite.applicant_name }} · {{ tramite.applicant_document }}</p>
+      </div>
+    </div>
+    <div class="head-actions">
+      <span class="badge" [ngClass]="badgeForStatus(tramite.status)">{{ tramite.status }}</span>
+      <button type="button" class="btn ghost sm" (click)="load()">
+        <app-icon name="refresh" [size]="14" /> Actualizar
+      </button>
+    </div>
+  </header>
+
+  <section class="progress-card card card-pad">
+    <header class="block-head spread">
+      <div>
+        <span class="eyebrow">Progreso</span>
+        <h3>{{ progress() }}% completado</h3>
+        <p class="muted tiny">
+          Política {{ policy()?.name }} · v{{ tramite.policy_version }}
+        </p>
+      </div>
+      <div class="progress-meta">
+        <span>{{ timeline().length }} pasos</span>
+        <span class="dot"></span>
+        <span>{{ tasks().length }} tareas generadas</span>
+      </div>
+    </header>
+    <div class="progress-track">
+      <div class="progress-fill" [style.width.%]="progress()"></div>
+    </div>
+  </section>
+
+  <section class="content-grid">
+    <article class="timeline card card-pad">
+      <header class="block-head">
+        <span class="eyebrow">Recorrido</span>
+        <h3>Línea de tiempo del trámite</h3>
+        <p class="muted tiny">Cada paso corresponde a un nodo de la política con su tarea asociada.</p>
+      </header>
+
+      <ol class="steps" *ngIf="timeline().length; else emptyTimeline">
+        <li *ngFor="let step of timeline()" [attr.data-status]="step.status">
+          <span class="bullet">
+            <app-icon
+              [name]="step.status === 'completed' ? 'check' : step.status === 'current' ? 'clock' : 'target'"
+              [size]="14"
+            />
+          </span>
+          <div class="step-content">
+            <header>
+              <strong>{{ step.name }}</strong>
+              <span class="badge neutral">{{ step.lane }}</span>
+            </header>
+            <span class="muted tiny mono">{{ step.code }}</span>
+            <div class="step-task" *ngIf="step.task as task">
+              <span class="badge" [ngClass]="badgeForTask(task.status)">{{ task.status }}</span>
+              <span class="muted tiny">
+                Inicio {{ formatDate(task.started_at) }}<ng-container *ngIf="task.finished_at"> · Fin {{ formatDate(task.finished_at) }}</ng-container>
+              </span>
+              <button type="button" class="btn ghost sm" (click)="openTask(task)">
+                Abrir tarea <app-icon name="arrowRight" [size]="14" />
+              </button>
+            </div>
+            <p class="muted tiny" *ngIf="!step.task">Aún no se ha generado la tarea.</p>
+          </div>
+        </li>
+      </ol>
+
+      <ng-template #emptyTimeline>
+        <div class="empty subtle">
+          <div class="icon-wrap"><app-icon name="flow" [size]="20" /></div>
+          <strong>No hay actividad para mostrar</strong>
+        </div>
+      </ng-template>
+    </article>
+
+    <aside class="side card card-pad">
+      <header class="block-head">
+        <span class="eyebrow">Resumen</span>
+        <h3>Datos clave</h3>
+      </header>
+      <div class="kv">
+        <div><span>Estado</span><span class="badge" [ngClass]="badgeForStatus(tramite.status)">{{ tramite.status }}</span></div>
+        <div><span>Solicitante</span><strong>{{ tramite.applicant_name }}</strong></div>
+        <div><span>Documento</span><strong>{{ tramite.applicant_document }}</strong></div>
+        <div><span>Tipo</span><strong>{{ tramite.procedure_type }}</strong></div>
+        <div><span>Versión política</span><strong>v{{ tramite.policy_version }}</strong></div>
+        <div><span>Nodo actual</span><strong class="mono">{{ tramite.current_node_code || '—' }}</strong></div>
+      </div>
+    </aside>
+  </section>
+</section>
+
+<ng-template #loadingTpl>
+  <div class="empty">
+    <div class="icon-wrap"><app-icon name="clock" [size]="20" /></div>
+    <strong>Cargando trámite…</strong>
+  </div>
+</ng-template>

@@ -1,0 +1,60 @@
+# ===== Secrets / env =====
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.ppk
+
+# ===== Python / FastAPI =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+.Python
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== Node / Angular =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json.bak
+
+# Angular build output
+/frontend/dist/
+/frontend/.angular/cache/
+/frontend/tmp/
+/frontend/out-tsc/
+/frontend/coverage/
+
+# ===== App-specific =====
+backend/uploads/
+backend/*.log
+backend/server.err.log
+backend/server.out.log
+backend/uvicorn-err.log
+backend/uvicorn-out.log
+frontend/*.log
+frontend/ng.out.log
+frontend/ng.err.log
+
+# ===== IDE / OS =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ===== Misc =====
+temp-evidence.txt
+*.bak
+*.tmp

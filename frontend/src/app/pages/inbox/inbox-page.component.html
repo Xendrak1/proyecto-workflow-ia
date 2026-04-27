@@ -1,0 +1,200 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <span class="eyebrow">Mi bandeja</span>
+      <h1>Tareas asignadas</h1>
+      <p class="muted">
+        Atiende lo que está en rojo, completa lo amarillo y revisa lo verde. La pantalla se actualiza
+        sola cada 12 segundos.
+      </p>
+    </div>
+    <div class="head-actions">
+      <div class="segmented">
+        <button
+          type="button"
+          [class.active]="filter() === 'department'"
+          (click)="setFilter('department')"
+          [disabled]="!session.department()"
+        >
+          <app-icon name="users" [size]="14" /> Mi área
+        </button>
+        <button type="button" [class.active]="filter() === 'mine'" (click)="setFilter('mine')">
+          <app-icon name="target" [size]="14" /> Mías
+        </button>
+        <button type="button" [class.active]="filter() === 'all'" (click)="setFilter('all')">
+          <app-icon name="layers" [size]="14" /> Todas
+        </button>
+      </div>
+      <button type="button" class="btn ghost sm" (click)="toggleAutoRefresh()">
+        <app-icon [name]="autoRefresh() ? 'pause' : 'play'" [size]="14" />
+        <span>{{ autoRefresh() ? 'Pausar auto-refresh' : 'Reactivar auto-refresh' }}</span>
+      </button>
+      <button type="button" class="btn primary sm" (click)="refresh()">
+        <app-icon name="refresh" [size]="14" />
+        <span>Actualizar</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="meter-row">
+    <article class="meter">
+      <span>Pendientes</span>
+      <strong>{{ stats().pendientes }}</strong>
+      <small class="badge danger dot">Atender ahora</small>
+    </article>
+    <article class="meter">
+      <span>En proceso</span>
+      <strong>{{ stats().enProceso }}</strong>
+      <small class="badge warn dot">Trabajando</small>
+    </article>
+    <article class="meter">
+      <span>Observadas</span>
+      <strong>{{ stats().observadas }}</strong>
+      <small class="badge violet dot">Requieren revisión</small>
+    </article>
+    <article class="meter">
+      <span>Completadas</span>
+      <strong>{{ stats().completadas }}</strong>
+      <small class="badge success dot">Cerradas</small>
+    </article>
+    <article class="meter live" *ngIf="lastRefreshed()">
+      <span>Última actualización</span>
+      <strong>{{ formatRefreshTime() }}</strong>
+      <small class="badge info dot">{{ autoRefresh() ? 'Auto-refresh activo' : 'Auto-refresh pausado' }}</small>
+    </article>
+  </div>
+
+  <div class="kanban">
+    <section class="kcol pendiente">
+      <header>
+        <span class="dot"></span>
+        <h3>Pendientes</h3>
+        <span class="count">{{ columns().pendiente.length }}</span>
+      </header>
+      <div class="cards">
+        <ng-container *ngIf="columns().pendiente.length; else emptyPend">
+          <article class="task-card" *ngFor="let task of columns().pendiente" (click)="openTask(task)">
+            <div class="card-head">
+              <strong>{{ task.title }}</strong>
+              <span class="badge danger dot">pendiente</span>
+            </div>
+            <p class="muted tiny">{{ task.tramite_id }} · {{ task.node_code }}</p>
+            <div class="card-meta">
+              <span class="badge neutral">{{ task.assigned_department || 'Sin área' }}</span>
+              <span class="badge neutral">{{ task.assigned_role || '—' }}</span>
+            </div>
+            <div class="card-actions">
+              <button type="button" class="btn sm">
+                <app-icon name="edit" [size]="14" /> Atender
+              </button>
+              <button type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
+                <app-icon name="check" [size]="14" /> Completar
+              </button>
+            </div>
+          </article>
+        </ng-container>
+        <ng-template #emptyPend>
+          <div class="empty">
+            <div class="icon-wrap"><app-icon name="check" [size]="20" /></div>
+            <strong>Sin pendientes</strong>
+            <span class="tiny">Nada urgente por ahora.</span>
+          </div>
+        </ng-template>
+      </div>
+    </section>
+
+    <section class="kcol en_proceso">
+      <header>
+        <span class="dot"></span>
+        <h3>En proceso</h3>
+        <span class="count">{{ columns().en_proceso.length }}</span>
+      </header>
+      <div class="cards">
+        <ng-container *ngIf="columns().en_proceso.length; else emptyProc">
+          <article class="task-card" *ngFor="let task of columns().en_proceso" (click)="openTask(task)">
+            <div class="card-head">
+              <strong>{{ task.title }}</strong>
+              <span class="badge warn dot">en proceso</span>
+            </div>
+            <p class="muted tiny">
+              {{ task.tramite_id }} · iniciada {{ formatRelative(task.started_at) }}
+            </p>
+            <div class="card-meta">
+              <span class="badge neutral">{{ task.assigned_department || 'Sin área' }}</span>
+            </div>
+            <div class="card-actions">
+              <button type="button" class="btn sm">
+                <app-icon name="edit" [size]="14" /> Continuar
+              </button>
+              <button type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
+                <app-icon name="check" [size]="14" /> Completar
+              </button>
+            </div>
+          </article>
+        </ng-container>
+        <ng-template #emptyProc>
+          <div class="empty">
+            <div class="icon-wrap"><app-icon name="clock" [size]="20" /></div>
+            <strong>Nada en marcha</strong>
+            <span class="tiny">Cuando atiendas una tarea aparecerá aquí.</span>
+          </div>
+        </ng-template>
+      </div>
+    </section>
+
+    <section class="kcol observada">
+      <header>
+        <span class="dot"></span>
+        <h3>Observadas</h3>
+        <span class="count">{{ columns().observada.length }}</span>
+      </header>
+      <div class="cards">
+        <ng-container *ngIf="columns().observada.length; else emptyObs">
+          <article class="task-card" *ngFor="let task of columns().observada" (click)="openTask(task)">
+            <div class="card-head">
+              <strong>{{ task.title }}</strong>
+              <span class="badge violet dot">observada</span>
+            </div>
+            <p class="muted tiny">{{ task.observations || 'Sin observación' }}</p>
+            <div class="card-meta">
+              <span class="badge neutral">{{ task.assigned_department || 'Sin área' }}</span>
+            </div>
+          </article>
+        </ng-container>
+        <ng-template #emptyObs>
+          <div class="empty">
+            <div class="icon-wrap"><app-icon name="alert" [size]="20" /></div>
+            <strong>Sin observaciones</strong>
+            <span class="tiny">Genial, ningún reproceso por ahora.</span>
+          </div>
+        </ng-template>
+      </div>
+    </section>
+
+    <section class="kcol completada">
+      <header>
+        <span class="dot"></span>
+        <h3>Completadas</h3>
+        <span class="count">{{ columns().completada.length }}</span>
+      </header>
+      <div class="cards">
+        <ng-container *ngIf="columns().completada.length; else emptyDone">
+          <article class="task-card done" *ngFor="let task of columns().completada" (click)="openTask(task)">
+            <div class="card-head">
+              <strong>{{ task.title }}</strong>
+              <span class="badge success dot">completada</span>
+            </div>
+            <p class="muted tiny">{{ task.tramite_id }} · cerrada {{ formatRelative(task.finished_at) }}</p>
+          </article>
+        </ng-container>
+        <ng-template #emptyDone>
+          <div class="empty">
+            <div class="icon-wrap"><app-icon name="check" [size]="20" /></div>
+            <strong>Aún no hay cierres</strong>
+            <span class="tiny">Las tareas terminadas se mostrarán aquí.</span>
+          </div>
+        </ng-template>
+      </div>
+    </section>
+  </div>
+</section>

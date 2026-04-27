@@ -1,0 +1,186 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <span class="eyebrow">Inteligencia operativa</span>
+      <h1>Analítica del negocio</h1>
+      <p class="muted">Detecta cuellos de botella, mide carga por departamento y monitorea la salud del sistema.</p>
+    </div>
+    <div class="head-actions">
+      <button type="button" class="btn ghost sm" (click)="refresh()">
+        <app-icon name="refresh" [size]="14" /> Actualizar
+      </button>
+      <button type="button" class="btn sm" (click)="exportReport('json')" [disabled]="exporting() !== null">
+        <app-icon name="doc" [size]="14" /> {{ exporting() === 'json' ? 'Exportando...' : 'JSON' }}
+      </button>
+      <button type="button" class="btn primary sm" (click)="exportReport('csv')" [disabled]="exporting() !== null">
+        <app-icon name="download" [size]="14" /> {{ exporting() === 'csv' ? 'Exportando...' : 'CSV' }}
+      </button>
+    </div>
+  </header>
+
+  <section class="kpi-grid">
+    <article class="kpi card card-pad">
+      <div class="kpi-icon" data-tone="primary"><app-icon name="flow" [size]="18" /></div>
+      <div>
+        <span class="eyebrow">Trámites</span>
+        <strong>{{ summary()?.total_tramites ?? 0 }}</strong>
+        <span class="muted tiny">solicitudes registradas</span>
+      </div>
+    </article>
+    <article class="kpi card card-pad">
+      <div class="kpi-icon" data-tone="info"><app-icon name="list" [size]="18" /></div>
+      <div>
+        <span class="eyebrow">Tareas totales</span>
+        <strong>{{ summary()?.total_tasks ?? 0 }}</strong>
+        <span class="muted tiny">generadas en todos los nodos</span>
+      </div>
+    </article>
+    <article class="kpi card card-pad">
+      <div class="kpi-icon" data-tone="warn"><app-icon name="clock" [size]="18" /></div>
+      <div>
+        <span class="eyebrow">Pendientes</span>
+        <strong>{{ summary()?.pending_tasks ?? 0 }}</strong>
+        <span class="muted tiny">esperan acción del equipo</span>
+      </div>
+    </article>
+    <article class="kpi card card-pad">
+      <div class="kpi-icon" data-tone="success"><app-icon name="check" [size]="18" /></div>
+      <div>
+        <span class="eyebrow">Tasa de cierre</span>
+        <strong>{{ completionRate() }}%</strong>
+        <span class="muted tiny">{{ summary()?.completed_tasks ?? 0 }} tareas completadas</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="content-grid">
+    <article class="card card-pad">
+      <header class="block-head spread">
+        <div>
+          <span class="eyebrow">Carga por departamento</span>
+          <h3>¿Quién está saturado?</h3>
+        </div>
+        <span class="muted tiny">{{ departmentLoad().length }} departamentos activos</span>
+      </header>
+
+      <div class="bars" *ngIf="departmentLoad().length; else emptyDepts">
+        <article *ngFor="let item of departmentLoad()">
+          <header>
+            <strong>{{ item.department }}</strong>
+            <span class="muted tiny">{{ item.total }} tareas</span>
+          </header>
+          <div class="bar-track">
+            <div
+              class="bar-segment pending"
+              [style.flex]="item.pendientes"
+              *ngIf="item.pendientes"
+              [title]="item.pendientes + ' pendientes'"
+            ></div>
+            <div
+              class="bar-segment in-progress"
+              [style.flex]="item.enProceso"
+              *ngIf="item.enProceso"
+              [title]="item.enProceso + ' en proceso'"
+            ></div>
+            <div
+              class="bar-segment completed"
+              [style.flex]="item.completadas"
+              *ngIf="item.completadas"
+              [title]="item.completadas + ' completadas'"
+            ></div>
+          </div>
+          <footer>
+            <span class="legend pending"><i></i>{{ item.pendientes }}</span>
+            <span class="legend in-progress"><i></i>{{ item.enProceso }}</span>
+            <span class="legend completed"><i></i>{{ item.completadas }}</span>
+          </footer>
+        </article>
+      </div>
+      <ng-template #emptyDepts>
+        <div class="empty subtle">
+          <strong>Aún no hay tareas registradas</strong>
+        </div>
+      </ng-template>
+    </article>
+
+    <article class="card card-pad">
+      <header class="block-head">
+        <span class="eyebrow">Distribución</span>
+        <h3>Trámites por tipo</h3>
+        <p class="muted tiny">Volumen relativo de cada procedimiento.</p>
+      </header>
+      <div class="proc-list" *ngIf="proceduresMix().length; else emptyProcs">
+        <article *ngFor="let item of proceduresMix()">
+          <header>
+            <strong>{{ item.procedure }}</strong>
+            <span class="muted tiny">{{ item.count }}</span>
+          </header>
+          <div class="proc-track">
+            <div class="proc-fill" [style.width.%]="(item.count / maxProcedure()) * 100"></div>
+          </div>
+        </article>
+      </div>
+      <ng-template #emptyProcs>
+        <div class="empty subtle">
+          <strong>No hay trámites aún</strong>
+        </div>
+      </ng-template>
+    </article>
+  </section>
+
+  <section class="card card-pad" style="margin-top: 16px">
+    <header class="block-head spread">
+      <div>
+        <span class="eyebrow">Detección automática</span>
+        <h3>Cuellos de botella</h3>
+        <p class="muted tiny">Nodos donde se acumulan tareas pendientes u observadas.</p>
+      </div>
+      <span class="badge warn" *ngIf="criticalNodesEnriched().length">
+        {{ criticalNodesEnriched().length }} alerta(s)
+      </span>
+    </header>
+
+    <div class="bottlenecks" *ngIf="criticalNodesEnriched().length; else emptyCritical">
+      <article class="critical-row" *ngFor="let node of criticalNodesEnriched()">
+        <div class="critical-info">
+          <strong>{{ node.meta?.name || node._id }}</strong>
+          <span class="muted tiny mono">{{ node._id }}</span>
+          <span class="muted tiny" *ngIf="node.meta">
+            {{ node.meta.lane }} · {{ node.meta.policy }}
+          </span>
+        </div>
+        <div class="critical-stats">
+          <span class="metric"><span class="muted tiny">Total</span><strong>{{ node.total }}</strong></span>
+          <span class="metric warn"><span class="muted tiny">Pendientes</span><strong>{{ node.pending }}</strong></span>
+          <span class="metric danger"><span class="muted tiny">Observadas</span><strong>{{ node.observed }}</strong></span>
+        </div>
+      </article>
+    </div>
+    <ng-template #emptyCritical>
+      <div class="empty subtle">
+        <div class="icon-wrap"><app-icon name="check" [size]="18" /></div>
+        <strong>Sin cuellos de botella detectados</strong>
+        <span class="tiny">El flujo se está moviendo con normalidad.</span>
+      </div>
+    </ng-template>
+
+    <div class="ai-insight" *ngIf="bottleneckData()?.ai_summary as aiSummary">
+      <header>
+        <app-icon name="sparkles" [size]="14" />
+        <strong>Lectura IA del cuello de botella</strong>
+        <span class="badge neutral">{{ bottleneckData()?.ai_source || 'fallback' }}</span>
+      </header>
+      <p>{{ aiSummary }}</p>
+    </div>
+
+    <div class="recommendations" *ngIf="bottleneckData()?.recommendations?.length">
+      <header>
+        <app-icon name="sparkles" [size]="14" />
+        <strong>Recomendaciones</strong>
+      </header>
+      <ul>
+        <li *ngFor="let rec of bottleneckData()?.recommendations ?? []">{{ rec }}</li>
+      </ul>
+    </div>
+  </section>
+</section>

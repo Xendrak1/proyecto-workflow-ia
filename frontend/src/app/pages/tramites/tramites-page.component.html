@@ -1,0 +1,150 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <span class="eyebrow">Operación</span>
+      <h1>Trámites</h1>
+      <p class="muted">Solicitudes activas y completadas. Cada trámite genera tareas en cada nodo de la política.</p>
+    </div>
+    <div class="head-actions" *ngIf="canCreate()">
+      <button type="button" class="btn primary" (click)="toggleCreate()">
+        <app-icon name="plus" [size]="14" />
+        {{ showCreate() ? 'Cancelar' : 'Iniciar trámite' }}
+      </button>
+    </div>
+  </header>
+
+  <section class="create-card card card-pad" *ngIf="showCreate()">
+    <header class="block-head">
+      <span class="eyebrow">Nuevo trámite</span>
+      <h3>Datos del solicitante</h3>
+      <p class="muted tiny">El sistema generará automáticamente las tareas siguiendo la política publicada.</p>
+    </header>
+    <form [formGroup]="form" (ngSubmit)="submit()" class="form">
+      <div class="row two">
+        <div class="field">
+          <label>Nombre del solicitante</label>
+          <input type="text" formControlName="applicant_name" placeholder="Ej. Juan Pérez" />
+        </div>
+        <div class="field">
+          <label>Documento</label>
+          <input type="text" formControlName="applicant_document" placeholder="Ej. 1234567 LP" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Tipo de trámite</label>
+        <select formControlName="procedure_type">
+          <option value="" disabled>Selecciona…</option>
+          <option *ngFor="let type of procedureTypes()" [value]="type">{{ type }}</option>
+        </select>
+        <span class="hint" *ngIf="!procedureTypes().length">
+          Aún no hay políticas publicadas. Pídele a un administrador que publique una política.
+        </span>
+      </div>
+      <div class="row" style="justify-content: flex-end; gap: 8px">
+        <button type="button" class="btn ghost" (click)="toggleCreate()">Cancelar</button>
+        <button type="submit" class="btn primary" [disabled]="!procedureTypes().length">
+          <app-icon name="zap" [size]="14" /> Crear trámite
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="meter-row">
+    <article class="meter">
+      <span>Total</span>
+      <strong>{{ stats().total }}</strong>
+    </article>
+    <article class="meter">
+      <span>En curso</span>
+      <strong>{{ stats().enCurso }}</strong>
+    </article>
+    <article class="meter">
+      <span>Completados</span>
+      <strong>{{ stats().completados }}</strong>
+    </article>
+    <article class="meter warning">
+      <span>Observados</span>
+      <strong>{{ stats().observados }}</strong>
+    </article>
+  </section>
+
+  <section class="filter-bar">
+    <div class="search">
+      <app-icon name="search" [size]="14" />
+      <input
+        type="text"
+        placeholder="Buscar por código, solicitante, documento…"
+        [value]="searchTerm()"
+        (input)="setSearch($any($event.target).value)"
+      />
+    </div>
+    <div class="segment">
+      <button type="button" [class.active]="statusFilter() === 'todos'" (click)="setStatus('todos')">
+        Todos
+      </button>
+      <button type="button" [class.active]="statusFilter() === 'en_proceso'" (click)="setStatus('en_proceso')">
+        En curso
+      </button>
+      <button type="button" [class.active]="statusFilter() === 'observado'" (click)="setStatus('observado')">
+        Observados
+      </button>
+      <button type="button" [class.active]="statusFilter() === 'completado'" (click)="setStatus('completado')">
+        Completados
+      </button>
+    </div>
+    <button type="button" class="btn ghost sm" (click)="refresh()">
+      <app-icon name="refresh" [size]="14" /> Actualizar
+    </button>
+  </section>
+
+  <section class="card list-card" *ngIf="filtered().length; else emptyTpl">
+    <table class="dt">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Solicitante</th>
+          <th>Tipo</th>
+          <th>Nodo actual</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let tramite of filtered()" (click)="openTramite(tramite)" class="clickable">
+          <td>
+            <strong class="mono">{{ tramite.code }}</strong>
+            <span class="muted tiny block">v política {{ tramite.policy_version }}</span>
+          </td>
+          <td>
+            <strong>{{ tramite.applicant_name }}</strong>
+            <span class="muted tiny block">{{ tramite.applicant_document }}</span>
+          </td>
+          <td>{{ tramite.procedure_type }}</td>
+          <td>
+            <span class="mono tiny">{{ tramite.current_node_code || '—' }}</span>
+          </td>
+          <td>
+            <span class="badge" [ngClass]="badgeForStatus(tramite.status)">{{ tramite.status }}</span>
+          </td>
+          <td class="right">
+            <button type="button" class="btn ghost sm" (click)="openTramite(tramite); $event.stopPropagation()">
+              Ver detalle <app-icon name="arrowRight" [size]="14" />
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <ng-template #emptyTpl>
+    <div class="empty">
+      <div class="icon-wrap"><app-icon name="flow" [size]="20" /></div>
+      <strong *ngIf="loading()">Cargando trámites…</strong>
+      <strong *ngIf="!loading() && tramites().length">Ningún trámite coincide con los filtros</strong>
+      <strong *ngIf="!loading() && !tramites().length">Aún no hay trámites registrados</strong>
+      <span class="tiny" *ngIf="!loading() && !tramites().length && canCreate()">
+        Inicia el primer trámite para que se generen las tareas automáticamente.
+      </span>
+    </div>
+  </ng-template>
+</section>

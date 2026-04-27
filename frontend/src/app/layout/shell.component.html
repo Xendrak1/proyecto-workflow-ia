@@ -1,0 +1,80 @@
+<div
+  class="shell"
+  [class.mobile-open]="mobileNavOpen()"
+  [class.desktop-collapsed]="desktopNavCollapsed()"
+>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <app-icon name="sparkles" [size]="20" />
+      </div>
+      <div class="brand-text">
+        <span>Workflow</span>
+        <strong>IA Studio</strong>
+      </div>
+      <button
+        type="button"
+        class="collapse-btn desktop-only"
+        (click)="toggleDesktopNav()"
+        [attr.aria-label]="desktopNavCollapsed() ? 'Expandir menú' : 'Minimizar menú'"
+        [title]="desktopNavCollapsed() ? 'Expandir menú' : 'Minimizar menú'"
+      >
+        <app-icon [name]="desktopNavCollapsed() ? 'arrowRight' : 'arrowLeft'" [size]="14" />
+      </button>
+    </div>
+
+    <nav class="nav">
+      <a
+        *ngFor="let item of visibleNav()"
+        class="nav-link"
+        [routerLink]="item.path"
+        routerLinkActive="active"
+        (click)="closeMobileNav()"
+      >
+        <span class="nav-icon"><app-icon [name]="item.icon" /></span>
+        <span class="nav-text">
+          <strong>{{ item.label }}</strong>
+          <span>{{ item.description }}</span>
+        </span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="profile-card">
+        <div class="avatar">{{ session.initials() }}</div>
+        <div class="profile-info">
+          <strong>{{ session.fullName() || 'Sin nombre' }}</strong>
+          <span>{{ formatRole(session.role()) }} · Plan {{ session.subscriptionPlan() }}</span>
+        </div>
+      </div>
+      <button type="button" class="logout-btn" (click)="logout()">
+        <app-icon name="logout" [size]="16" />
+        <span>Cerrar sesión</span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button type="button" class="hamburger" (click)="toggleMobileNav()" aria-label="Abrir menú">
+          <app-icon name="layers" [size]="18" />
+        </button>
+<div class="topbar-title">
+          <span class="eyebrow">{{ formatRole(session.role()) }}</span>
+          <strong>Hola, {{ session.fullName() || 'usuario' }}</strong>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span class="badge primary dot" *ngIf="session.department() as dept">{{ dept }}</span>
+        <span class="badge neutral dot">{{ session.email() }}</span>
+      </div>
+    </header>
+
+    <div class="page-wrap">
+      <router-outlet />
+    </div>
+  </div>
+
+  <div class="scrim" (click)="closeMobileNav()"></div>
+</div>

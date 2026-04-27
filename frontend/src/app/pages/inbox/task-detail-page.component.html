@@ -1,0 +1,314 @@
+<section class="page" *ngIf="!loading(); else loadingTpl">
+  <ng-container *ngIf="task() as currentTask; else missingTpl">
+    <header class="page-head">
+      <button type="button" class="btn ghost sm" (click)="back()">
+        <app-icon name="arrowLeft" [size]="14" /> Volver a la bandeja
+      </button>
+      <div class="head-actions">
+        <button type="button" class="btn sm" (click)="saveProgress()" [disabled]="saving()">
+          <app-icon name="doc" [size]="14" /> Guardar avance
+        </button>
+        <button
+          type="button"
+          class="btn primary sm"
+          (click)="completeTask()"
+          [disabled]="saving() || currentTask.status === 'completada'"
+        >
+          <app-icon name="check" [size]="14" /> Completar y enrutar
+        </button>
+      </div>
+    </header>
+
+    <section class="task-summary card card-pad">
+      <div class="summary-main">
+        <span class="eyebrow">{{ currentTask.tramite_id }} · {{ currentTask.node_code }}</span>
+        <h1>{{ currentTask.title }}</h1>
+        <p class="muted">
+          {{ currentNode()?.lane || 'Sin calle asignada' }} · responsable
+          {{ currentNode()?.responsible_role || '—' }} ·
+          área {{ currentNode()?.responsible_department || '—' }}
+        </p>
+      </div>
+      <div class="summary-meta">
+        <span class="badge" [ngClass]="statusBadge(currentTask.status)">
+          <span class="dot"></span>{{ currentTask.status }}
+        </span>
+        <span class="badge neutral" *ngIf="tramite() as t">
+          <app-icon name="flow" [size]="12" /> Trámite {{ t.code }}
+        </span>
+        <span class="badge neutral" *ngIf="policy() as p">
+          <app-icon name="workflow" [size]="12" /> Política {{ p.name }}
+        </span>
+      </div>
+    </section>
+
+    <section class="content-grid">
+      <article class="card card-pad form-card">
+        <header class="block-head">
+          <span class="eyebrow">Formulario del nodo</span>
+          <h3>Captura información de esta actividad</h3>
+          <p class="muted tiny">
+            Los campos los definió el administrador al modelar la política.
+          </p>
+        </header>
+
+        <ng-container *ngIf="fields().length; else noFields">
+          <form [formGroup]="dynamicForm()" class="dyn-form">
+            <ng-container *ngFor="let field of fields()">
+              <div class="field" [ngSwitch]="field.field_type">
+                <label>
+                  {{ field.label }}
+                  <span class="req" *ngIf="field.required">·obligatorio</span>
+                </label>
+
+                <textarea
+                  *ngSwitchCase="'texto'"
+                  [formControlName]="field.key"
+                  rows="3"
+                  placeholder="Escribe aquí…"
+                ></textarea>
+
+                <input *ngSwitchCase="'numero'" type="number" [formControlName]="field.key" />
+
+                <input *ngSwitchCase="'fecha'" type="date" [formControlName]="field.key" />
+
+                <select *ngSwitchCase="'lista'" [formControlName]="field.key">
+                  <option value="">Selecciona una opción…</option>
+                  <option *ngFor="let opt of field.options" [value]="opt">{{ opt }}</option>
+                </select>
+
+                <label *ngSwitchCase="'booleano'" class="check-row">
+                  <input type="checkbox" [formControlName]="field.key" />
+                  <span class="muted tiny">Marca si aplica</span>
+                </label>
+
+                <input
+                  *ngSwitchCase="'archivo'"
+                  type="text"
+                  [formControlName]="field.key"
+                  placeholder="URL o nombre del archivo cargado"
+                />
+
+                <input
+                  *ngSwitchCase="'imagen'"
+                  type="text"
+                  [formControlName]="field.key"
+                  placeholder="URL de la imagen o referencia"
+                />
+
+                <input *ngSwitchDefault type="text" [formControlName]="field.key" />
+              </div>
+            </ng-container>
+          </form>
+        </ng-container>
+
+        <ng-template #noFields>
+          <div class="empty">
+            <div class="icon-wrap"><app-icon name="doc" [size]="20" /></div>
+            <strong>Esta actividad no tiene formulario</strong>
+            <span class="tiny">
+              Completa la tarea cuando termines tu trabajo y el flujo continuará automáticamente.
+            </span>
+          </div>
+        </ng-template>
+
+        <div class="field">
+          <label>Observaciones</label>
+          <textarea
+            rows="3"
+            placeholder="Anota detalles, decisiones o motivos relevantes…"
+            [value]="observation()"
+            (input)="updateObservation($event)"
+          ></textarea>
+        </div>
+
+        <section class="evidence-block">
+          <header class="block-head">
+            <span class="eyebrow">Evidencias</span>
+            <h3>Adjunta respaldo del trabajo realizado</h3>
+            <p class="muted tiny">
+              Sube documentos, capturas o archivos de apoyo. La evidencia queda vinculada a esta tarea.
+            </p>
+          </header>
+
+          <div class="evidence-upload">
+            <label class="file-picker">
+              <input type="file" (change)="onEvidencePicked($event)" />
+              <span>{{ selectedEvidenceName() || 'Seleccionar archivo' }}</span>
+            </label>
+            <input
+              type="text"
+              class="evidence-note"
+              placeholder="Nota breve sobre la evidencia"
+              [value]="evidenceNote()"
+              (input)="updateEvidenceNote($event)"
+            />
+            <button type="button" class="btn sm" (click)="uploadEvidence()" [disabled]="uploadingEvidence()">
+              <app-icon name="upload" [size]="14" /> {{ uploadingEvidence() ? 'Cargando...' : 'Subir evidencia' }}
+            </button>
+          </div>
+
+          <div class="evidence-list" *ngIf="currentTask.evidences?.length; else noEvidence">
+            <article class="evidence-item" *ngFor="let evidence of currentTask.evidences">
+              <div>
+                <strong>{{ evidence.file_name }}</strong>
+                <p class="muted tiny">{{ evidence.note || 'Sin nota adicional' }}</p>
+                <span class="muted tiny">
+                  {{ evidence.content_type || 'archivo' }} · {{ formatBytes(evidence.size_bytes) }}
+                </span>
+              </div>
+              <a
+                class="btn ghost sm"
+                *ngIf="evidence.file_url"
+                [href]="absoluteEvidenceUrl(evidence)"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <app-icon name="doc" [size]="14" /> Ver
+              </a>
+            </article>
+          </div>
+          <ng-template #noEvidence>
+            <div class="empty subtle">
+              <strong>Aún no se cargaron evidencias</strong>
+              <span class="tiny">Adjunta al menos un respaldo cuando el trámite lo requiera.</span>
+            </div>
+          </ng-template>
+        </section>
+      </article>
+
+      <aside class="side-cards">
+        <article class="card card-pad ai-card">
+          <span class="eyebrow">IA del formulario</span>
+          <h3>Llenado asistido</h3>
+          <p class="muted tiny">
+            Pega un informe o graba audio y la IA propondrá cómo llenar este formulario.
+          </p>
+
+          <div class="ai-state" [class.loading]="aiLoading()" [class.error]="!!aiError()">
+            <strong>
+              {{
+                aiLoading()
+                  ? 'Procesando con IA...'
+                  : aiRecording()
+                    ? 'Grabando audio'
+                    : aiSuggestion()
+                      ? 'Propuesta lista'
+                      : aiError()
+                        ? 'Hubo un problema'
+                        : 'Esperando informe'
+              }}
+            </strong>
+            <span class="tiny" *ngIf="aiSuggestion() as suggestion">
+              Fuente: {{ suggestion.source || 'gemini' }}{{ suggestion.model ? ' · ' + suggestion.model : '' }}
+            </span>
+            <span class="tiny" *ngIf="!aiSuggestion() && !aiError()">{{ aiStatus() }}</span>
+            <span class="tiny" *ngIf="aiError()">{{ aiError() }}</span>
+          </div>
+
+          <form [formGroup]="aiForm" (ngSubmit)="generateAiFill()" class="ai-form">
+            <textarea
+              rows="6"
+              formControlName="report_text"
+              placeholder="Ej. El técnico visitó el domicilio, verificó la acometida, confirmó viabilidad y dejó observación sobre el poste más cercano..."
+            ></textarea>
+            <div class="ai-actions">
+              <button type="submit" class="btn primary sm" [disabled]="aiLoading() || saving()">
+                <app-icon name="sparkles" [size]="14" /> Generar llenado
+              </button>
+              <button
+                type="button"
+                class="btn sm"
+                (click)="toggleVoice()"
+                [disabled]="!canUseVoice() || aiLoading() || saving()"
+              >
+                <app-icon [name]="aiListening() ? 'stop' : 'mic'" [size]="14" />
+                {{
+                  aiRecording()
+                    ? 'Detener grabación'
+                    : aiListening()
+                      ? 'Detener dictado'
+                      : voiceSupported()
+                        ? 'Capturar voz'
+                        : 'Grabar audio'
+                }}
+              </button>
+            </div>
+          </form>
+
+          <div class="ai-preview" *ngIf="aiSuggestion() as suggestion">
+            <p class="muted tiny">{{ suggestion.summary }}</p>
+            <p class="muted tiny" *ngIf="suggestion.transcript">
+              <strong>Transcripción:</strong> {{ suggestion.transcript }}
+            </p>
+            <div class="kv compact" *ngIf="fields().length">
+              <div *ngFor="let field of fields()">
+                <span>{{ field.label }}</span>
+                <strong>{{ suggestion.form_data[field.key] ?? '—' }}</strong>
+              </div>
+            </div>
+            <button type="button" class="btn success sm" (click)="applyAiFill()">
+              <app-icon name="check" [size]="14" /> Aplicar al formulario
+            </button>
+          </div>
+        </article>
+
+        <article class="card card-pad">
+          <span class="eyebrow">Trámite</span>
+          <ng-container *ngIf="tramite() as t; else noTramite">
+            <h3>{{ t.applicant_name }}</h3>
+            <p class="muted tiny">Documento {{ t.applicant_document }}</p>
+            <div class="kv">
+              <div><span>Código</span><strong>{{ t.code }}</strong></div>
+              <div><span>Tipo</span><strong>{{ t.procedure_type }}</strong></div>
+              <div>
+                <span>Estado</span>
+                <span class="badge" [ngClass]="statusBadge(t.status)">{{ t.status }}</span>
+              </div>
+              <div *ngIf="t.current_node_code">
+                <span>Nodo actual</span><strong>{{ t.current_node_code }}</strong>
+              </div>
+            </div>
+          </ng-container>
+          <ng-template #noTramite>
+            <p class="muted">Trámite no disponible</p>
+          </ng-template>
+        </article>
+
+        <article class="card card-pad">
+          <span class="eyebrow">Próximos pasos</span>
+          <h3>¿Qué pasa al completar?</h3>
+          <ul class="steps">
+            <li>
+              <span class="step-dot"></span>
+              <p>El sistema marca esta tarea como completada con tus datos.</p>
+            </li>
+            <li>
+              <span class="step-dot"></span>
+              <p>Se evalúa la política y se crean automáticamente las tareas siguientes.</p>
+            </li>
+            <li>
+              <span class="step-dot"></span>
+              <p>El siguiente responsable verá la tarea en su bandeja en tiempo real.</p>
+            </li>
+          </ul>
+        </article>
+      </aside>
+    </section>
+  </ng-container>
+</section>
+
+<ng-template #loadingTpl>
+  <div class="empty">
+    <div class="icon-wrap"><app-icon name="clock" [size]="20" /></div>
+    <strong>Cargando tarea…</strong>
+  </div>
+</ng-template>
+
+<ng-template #missingTpl>
+  <div class="empty">
+    <div class="icon-wrap"><app-icon name="alert" [size]="20" /></div>
+    <strong>Tarea no encontrada</strong>
+    <button type="button" class="btn sm" (click)="back()">Volver a la bandeja</button>
+  </div>
+</ng-template>

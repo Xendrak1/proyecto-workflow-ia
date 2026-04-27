@@ -1,0 +1,636 @@
+<section class="page" *ngIf="policy() as currentPolicy; else loadingTpl">
+  <header class="page-head">
+    <div class="head-left">
+      <button type="button" class="btn ghost sm" (click)="back()">
+        <app-icon name="arrowLeft" [size]="14" /> Políticas
+      </button>
+      <div>
+        <span class="eyebrow">{{ currentPolicy.procedure_type }} · v{{ currentPolicy.version }}</span>
+        <h1>{{ currentPolicy.name }}</h1>
+        <p class="muted">{{ currentPolicy.description }}</p>
+      </div>
+    </div>
+    <div class="head-actions">
+      <span class="badge" [ngClass]="policyStatusBadge(currentPolicy.status)">
+        <span class="dot"></span>{{ currentPolicy.status }}
+      </span>
+      <button type="button" class="btn sm" (click)="validate()">
+        <app-icon name="check" [size]="14" /> Validar
+      </button>
+      <button
+        type="button"
+        class="btn primary sm"
+        (click)="publish()"
+        [disabled]="currentPolicy.status === 'publicada'"
+      >
+        <app-icon name="send" [size]="14" /> Publicar
+      </button>
+    </div>
+  </header>
+
+  <aside class="help-banner">
+    <div class="help-icon"><app-icon name="sparkles" [size]="16" /></div>
+    <div class="help-body">
+      <strong>¿Cómo se diseña una política?</strong>
+      <span class="muted tiny">
+        1) Agrega nodos con los botones rápidos · 2) Arrástralos para acomodarlos · 3) Conecta nodos en la pestaña <em>Ruta</em>
+        · 4) En <em>Campos</em> define el formulario que llenará el funcionario · 5) <em>Validar</em> y <em>Publicar</em>.
+      </span>
+      <span class="muted tiny">El diseñador revisa cambios remotos cada pocos segundos para apoyar trabajo colaborativo.</span>
+    </div>
+    <button type="button" class="btn ghost sm" (click)="autoOrganize()" [disabled]="organizing()" title="Reorganiza el diagrama automáticamente">
+      <app-icon name="layers" [size]="14" /> {{ organizing() ? 'Organizando...' : 'Auto-organizar' }}
+    </button>
+  </aside>
+
+  <div class="meter-row">
+    <article class="meter">
+      <span>Nodos</span>
+      <strong>{{ stats().total }}</strong>
+    </article>
+    <article class="meter">
+      <span>Actividades</span>
+      <strong>{{ stats().actividades }}</strong>
+    </article>
+    <article class="meter">
+      <span>Decisiones</span>
+      <strong>{{ stats().decisiones }}</strong>
+    </article>
+    <article class="meter">
+      <span>Transiciones</span>
+      <strong>{{ stats().transiciones }}</strong>
+    </article>
+    <article class="meter">
+      <span>Calles</span>
+      <strong>{{ laneNames().length }}</strong>
+    </article>
+  </div>
+
+  <section class="studio">
+    <article class="canvas-card">
+      <div class="canvas-toolbar">
+        <div class="tools">
+          <button type="button" class="tool" (click)="quickAdd('inicio')">
+            <span class="dot type-success"></span>+ Inicio
+          </button>
+          <button type="button" class="tool" (click)="quickAdd('actividad')">
+            <span class="dot type-info"></span>+ Actividad
+          </button>
+          <button type="button" class="tool" (click)="quickAdd('decision')">
+            <span class="dot type-warn"></span>+ Decisión
+          </button>
+          <button type="button" class="tool" (click)="quickAdd('fin')">
+            <span class="dot type-danger"></span>+ Fin
+          </button>
+        </div>
+        <div class="tools right">
+          <button type="button" class="tool" (click)="autoOrganize()" [disabled]="organizing()" title="Organizar automáticamente">
+            <app-icon name="layers" [size]="14" /> {{ organizing() ? 'Organizando...' : 'Organizar' }}
+          </button>
+          <span class="divider"></span>
+          <button type="button" class="tool" (click)="zoomOut()" title="Alejar">
+            <app-icon name="zoomOut" [size]="14" />
+          </button>
+          <span class="zoom-readout">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
+          <button type="button" class="tool" (click)="zoomIn()" title="Acercar">
+            <app-icon name="zoomIn" [size]="14" />
+          </button>
+          <button type="button" class="tool" (click)="resetView()" title="Centrar">
+            <app-icon name="target" [size]="14" />
+          </button>
+        </div>
+      </div>
+
+      <div class="diagram-shell" [class.lanes-collapsed]="laneListCollapsed()" *ngIf="diagramNodes().length; else emptyDiagram">
+        <aside class="lane-list" *ngIf="!laneListCollapsed()">
+          <div class="lane-list-controls" #laneControls>
+            <div class="lane-list-head">
+              <strong>Calles</strong>
+              <div class="lane-list-actions">
+                <button type="button" class="mini-action" (click)="startLaneCreate()">+ Calle</button>
+                <button type="button" class="mini-action" (click)="toggleLaneList()">Ocultar</button>
+              </div>
+            </div>
+            <div class="lane-create" *ngIf="creatingLane()">
+              <input
+                type="text"
+                [value]="newLaneName()"
+                (input)="updateNewLaneName(($any($event.target).value))"
+                (keydown.enter)="createLane()"
+                (keydown.escape)="cancelLaneCreate()"
+                placeholder="Ej. Comercial"
+              />
+              <div class="lane-edit-actions">
+                <button type="button" class="mini-action save" (click)="createLane()">Crear</button>
+                <button type="button" class="mini-action" (click)="cancelLaneCreate()">Cancelar</button>
+              </div>
+            </div>
+          </div>
+          <div class="lane-label" *ngFor="let lane of lanes(); trackBy: trackLane">
+            <ng-container *ngIf="editingLane() !== lane.lane; else editLaneTpl">
+              <div class="lane-head">
+                <strong>{{ lane.lane }}</strong>
+                <div class="lane-head-actions">
+                  <button type="button" class="mini-action" (click)="startLaneEdit(lane.lane)" title="Editar calle">
+                    Editar
+                  </button>
+                </div>
+              </div>
+              <span>{{ lane.items.length }} nodos</span>
+            </ng-container>
+            <ng-template #editLaneTpl>
+              <div class="lane-edit">
+                <input
+                  type="text"
+                  [value]="laneDraft()"
+                  (input)="updateLaneDraft(($any($event.target).value))"
+                  (keydown.enter)="saveLaneEdit(lane.lane)"
+                  (keydown.escape)="cancelLaneEdit()"
+                />
+                <div class="lane-edit-actions">
+                  <button type="button" class="mini-action save" (click)="saveLaneEdit(lane.lane)">Guardar</button>
+                  <button type="button" class="mini-action danger" (click)="deleteLane(lane.lane)">Borrar</button>
+                  <button type="button" class="mini-action" (click)="cancelLaneEdit()">Cancelar</button>
+                </div>
+              </div>
+            </ng-template>
+          </div>
+        </aside>
+        <div class="stage-wrap">
+          <button type="button" class="lane-flyout" *ngIf="laneListCollapsed()" (click)="toggleLaneList()">
+            Mostrar calles
+          </button>
+          <div
+            class="stage"
+            #board
+            [style.height.px]="diagramHeight()"
+            (mousedown)="startCanvasPan($event, board)"
+          >
+            <div
+              class="world"
+              [style.transform]="'translate(' + canvasOffset().x + 'px,' + canvasOffset().y + 'px) scale(' + zoomLevel() + ')'"
+            >
+              <div
+                class="lane-bg"
+                *ngFor="let lane of lanes(); let i = index; trackBy: trackLane"
+                [style.top.px]="laneTopForIndex(i)"
+              ></div>
+
+              <svg class="diagram-svg" [attr.viewBox]="'0 0 1600 ' + diagramHeight()" preserveAspectRatio="none">
+                <defs>
+                  <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                    <polygon points="0 0, 10 4, 0 8" class="arrowhead-poly"></polygon>
+                  </marker>
+                </defs>
+                <ng-container *ngFor="let edge of diagramEdges(); trackBy: trackEdge">
+                  <path
+                    class="edge"
+                    [attr.d]="edgePath(edge)"
+                    [attr.data-type]="edge.type"
+                    marker-end="url(#arrowhead)"
+                  ></path>
+                  <text
+                    class="edge-label"
+                    [attr.x]="(edge.fromX + edge.toX) / 2"
+                    [attr.y]="(edge.fromY + edge.toY) / 2 - 10"
+                    *ngIf="edge.label"
+                  >
+                    {{ edge.label }}
+                  </text>
+                </ng-container>
+              </svg>
+
+              <article
+                class="diagram-card"
+                *ngFor="let node of diagramNodes(); trackBy: trackNode"
+                [class.selected]="selectedNodeCode() === node.code"
+                [attr.data-type]="node.node_type"
+                [style.left.px]="node.x"
+                [style.top.px]="node.y"
+                (mousedown)="startNodeDrag(node.code, $event, board)"
+                (click)="selectNode(node.code)"
+              >
+                <span class="port port-in"></span>
+                <span class="port port-out"></span>
+                <header>
+                  <span class="badge" [ngClass]="badgeForType(node.node_type)">{{ node.node_type }}</span>
+                  <span class="code">{{ node.code }}</span>
+                </header>
+                <strong>{{ node.name }}</strong>
+                <span class="muted tiny">{{ node.lane }}</span>
+                <button
+                  type="button"
+                  class="card-action"
+                  (mousedown)="$event.stopPropagation()"
+                  (click)="$event.stopPropagation(); deleteNode(node.code)"
+                  title="Eliminar nodo"
+                >
+                  <app-icon name="x" [size]="12" />
+                </button>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ng-template #emptyDiagram>
+        <div class="empty">
+          <div class="icon-wrap"><app-icon name="workflow" [size]="22" /></div>
+          <strong>El diagrama está vacío</strong>
+          <span class="tiny">
+            Usa los botones rápidos para agregar Inicio, Actividades, Decisiones y Fin, o pídele a la IA que lo proponga.
+          </span>
+          <div class="row" style="margin-top: 8px">
+            <button type="button" class="btn sm" (click)="quickAdd('inicio')">+ Inicio</button>
+            <button type="button" class="btn sm primary" (click)="setPanel('ai')">
+              <app-icon name="sparkles" [size]="14" /> Proponer con IA
+            </button>
+          </div>
+        </div>
+      </ng-template>
+    </article>
+
+    <aside class="rail">
+      <nav class="rail-tabs">
+        <button type="button" [class.active]="panel() === 'inspector'" (click)="setPanel('inspector')">
+          <app-icon name="target" [size]="14" /> Inspector
+        </button>
+        <button type="button" [class.active]="panel() === 'add-node'" (click)="setPanel('add-node')">
+          <app-icon name="plus" [size]="14" /> Nodo
+        </button>
+        <button type="button" [class.active]="panel() === 'add-route'" (click)="setPanel('add-route')">
+          <app-icon name="flow" [size]="14" /> Ruta
+        </button>
+        <button type="button" [class.active]="panel() === 'fields'" (click)="setPanel('fields')">
+          <app-icon name="doc" [size]="14" /> Campos
+        </button>
+        <button type="button" [class.active]="panel() === 'ai'" (click)="setPanel('ai')">
+          <app-icon name="sparkles" [size]="14" /> IA
+        </button>
+      </nav>
+
+      <div class="rail-guide card card-pad">
+        <span class="eyebrow">{{ panelGuide().title }}</span>
+        <p class="muted tiny">{{ panelGuide().description }}</p>
+      </div>
+
+      <!-- Inspector -->
+      <section class="rail-panel card card-pad" *ngIf="panel() === 'inspector'">
+        <ng-container *ngIf="selectedNode() as node; else nothingSelected">
+          <header class="block-head spread">
+            <div>
+              <span class="eyebrow">{{ node.code }}</span>
+              <h3>{{ node.name }}</h3>
+            </div>
+            <span class="badge" [ngClass]="badgeForType(node.node_type)">{{ node.node_type }}</span>
+          </header>
+          <div class="kv">
+            <div><span>Calle</span><strong>{{ node.lane }}</strong></div>
+            <div><span>Rol responsable</span><strong>{{ node.responsible_role || '—' }}</strong></div>
+            <div><span>Departamento</span><strong>{{ node.responsible_department || '—' }}</strong></div>
+            <div><span>Entradas</span><strong>{{ incoming().length }}</strong></div>
+            <div><span>Salidas</span><strong>{{ outgoing().length }}</strong></div>
+            <div><span>Campos</span><strong>{{ (node.form_fields ?? []).length }}</strong></div>
+          </div>
+
+          <div class="route-hints" *ngIf="outgoing().length">
+            <span class="eyebrow">Salidas</span>
+            <ul>
+              <li *ngFor="let t of outgoing(); trackBy: trackTransition">
+                <span>→ {{ t.target_code }}</span>
+                <span class="badge neutral">{{ t.transition_type }}</span>
+                <span class="muted tiny" *ngIf="t.condition_label">· {{ t.condition_label }}</span>
+                <button type="button" class="btn ghost sm" (click)="deleteTransition(t)" title="Quitar transición">
+                  <app-icon name="trash" [size]="14" />
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <div class="block-foot">
+            <button type="button" class="btn sm" (click)="setPanel('fields')">
+              <app-icon name="doc" [size]="14" /> Editar campos
+            </button>
+            <button type="button" class="btn sm danger" (click)="deleteNode(node.code)">
+              <app-icon name="trash" [size]="14" /> Eliminar nodo
+            </button>
+          </div>
+        </ng-container>
+        <ng-template #nothingSelected>
+          <header class="block-head">
+            <span class="eyebrow">Inspector</span>
+            <h3>Selecciona un nodo</h3>
+            <p class="muted tiny">Haz clic en cualquier tarjeta del diagrama para ver su detalle.</p>
+          </header>
+          <div class="empty subtle">
+            <div class="icon-wrap"><app-icon name="target" [size]="20" /></div>
+            <span class="tiny">Aún no hay nodo seleccionado.</span>
+          </div>
+        </ng-template>
+      </section>
+
+      <!-- Add node -->
+      <section class="rail-panel card card-pad" *ngIf="panel() === 'add-node'">
+        <header class="block-head">
+          <span class="eyebrow">Nuevo nodo</span>
+          <h3>Agregar al diagrama</h3>
+        </header>
+        <form [formGroup]="nodeForm" (ngSubmit)="createNode()" class="form">
+          <div class="field">
+            <label>Código</label>
+            <input type="text" formControlName="code" placeholder="ej. ATC_REG" />
+          </div>
+          <div class="field">
+            <label>Nombre</label>
+            <input type="text" formControlName="name" placeholder="ej. Registrar solicitud" />
+          </div>
+          <div class="row two">
+            <div class="field">
+              <label>Tipo</label>
+              <select formControlName="node_type">
+                <option value="inicio">Inicio</option>
+                <option value="actividad">Actividad</option>
+                <option value="decision">Decisión</option>
+                <option value="fork">Fork (paralelo)</option>
+                <option value="join">Join (unión)</option>
+                <option value="fin">Fin</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Calle</label>
+              <input type="text" formControlName="lane" />
+            </div>
+          </div>
+          <div class="row two">
+            <div class="field">
+              <label>Rol</label>
+              <input type="text" formControlName="responsible_role" />
+            </div>
+            <div class="field">
+              <label>Departamento</label>
+              <input type="text" formControlName="responsible_department" />
+            </div>
+          </div>
+          <button type="submit" class="btn primary block">
+            <app-icon name="plus" [size]="14" /> Agregar nodo
+          </button>
+        </form>
+      </section>
+
+      <!-- Add route -->
+      <section class="rail-panel card card-pad" *ngIf="panel() === 'add-route'">
+        <header class="block-head">
+          <span class="eyebrow">Conectar nodos</span>
+          <h3>Crear transición</h3>
+          <p class="muted tiny">Define la secuencia o reglas entre actividades.</p>
+        </header>
+        <form [formGroup]="transitionForm" (ngSubmit)="createTransition()" class="form">
+          <div class="field">
+            <label>Origen</label>
+            <select formControlName="source_code">
+              <option value="">Selecciona…</option>
+              <option *ngFor="let n of nodeOptions()" [value]="n.code">{{ n.code }} · {{ n.name }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Destino</label>
+            <select formControlName="target_code">
+              <option value="">Selecciona…</option>
+              <option *ngFor="let n of nodeOptions()" [value]="n.code">{{ n.code }} · {{ n.name }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Tipo</label>
+            <select formControlName="transition_type">
+              <option value="secuencial">Secuencial</option>
+              <option value="alternativa">Alternativa (decisión)</option>
+              <option value="iterativa">Iterativa (vuelve)</option>
+              <option value="paralela">Paralela (en paralelo)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Condición (si aplica)</label>
+            <input type="text" formControlName="condition_label" placeholder="ej. viable" />
+          </div>
+          <button type="submit" class="btn primary block">
+            <app-icon name="flow" [size]="14" /> Conectar
+          </button>
+        </form>
+      </section>
+
+      <!-- Fields -->
+      <section class="rail-panel card card-pad" *ngIf="panel() === 'fields'">
+        <ng-container *ngIf="selectedNode() as node; else noFieldNode">
+          <header class="block-head">
+            <span class="eyebrow">Campos del formulario</span>
+            <h3>{{ node.name }}</h3>
+            <p class="muted tiny">El funcionario llenará estos campos cuando atienda el nodo.</p>
+          </header>
+          <form [formGroup]="fieldForm" (ngSubmit)="addField()" class="form">
+            <div class="row two">
+              <div class="field">
+                <label>Clave técnica</label>
+                <input type="text" formControlName="key" placeholder="ej. direccion" />
+              </div>
+              <div class="field">
+                <label>Etiqueta</label>
+                <input type="text" formControlName="label" placeholder="ej. Dirección" />
+              </div>
+            </div>
+            <div class="row two">
+              <div class="field">
+                <label>Tipo</label>
+                <select formControlName="field_type">
+                  <option value="texto">Texto</option>
+                  <option value="numero">Número</option>
+                  <option value="fecha">Fecha</option>
+                  <option value="lista">Lista</option>
+                  <option value="archivo">Archivo</option>
+                  <option value="imagen">Imagen</option>
+                  <option value="booleano">Booleano</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="check-row">
+                  <input type="checkbox" formControlName="required" />
+                  <span>Obligatorio</span>
+                </label>
+              </div>
+            </div>
+            <div class="field">
+              <label>Opciones (separadas por coma · solo Lista)</label>
+              <input type="text" formControlName="options_text" placeholder="viable, no viable" />
+            </div>
+            <button type="submit" class="btn primary block">
+              <app-icon name="plus" [size]="14" /> Agregar campo
+            </button>
+          </form>
+
+          <div class="fields-list" *ngIf="(node.form_fields ?? []).length">
+            <article *ngFor="let field of node.form_fields ?? []; trackBy: trackField" class="field-row">
+              <div>
+                <strong>{{ field.label }}</strong>
+                <span class="muted tiny">{{ field.key }} · {{ field.field_type }}</span>
+              </div>
+              <div class="row">
+                <span class="badge" [ngClass]="field.required ? 'warn' : 'neutral'">
+                  {{ field.required ? 'requerido' : 'opcional' }}
+                </span>
+                <button type="button" class="btn ghost sm" (click)="removeField(field.key)">
+                  <app-icon name="trash" [size]="14" />
+                </button>
+              </div>
+            </article>
+          </div>
+        </ng-container>
+        <ng-template #noFieldNode>
+          <header class="block-head">
+            <span class="eyebrow">Formulario del nodo</span>
+            <h3>Selecciona un nodo</h3>
+            <p class="muted tiny">Cada nodo puede tener su propio mini-formulario.</p>
+          </header>
+        </ng-template>
+      </section>
+
+      <!-- IA -->
+      <section class="rail-panel card card-pad" *ngIf="panel() === 'ai'">
+        <header class="block-head">
+          <span class="eyebrow">Asistente IA</span>
+          <h3>Proponer flujo desde texto o voz</h3>
+          <p class="muted tiny">{{ aiStatus() }}</p>
+        </header>
+        <div class="ai-state" [class.error]="!!aiErrorDetail()" [class.loading]="aiGenerating()">
+          <strong>
+            {{
+              aiGenerating()
+                ? 'Pensando...'
+                : aiRecording()
+                  ? 'Grabando audio'
+                : aiSuggestion()
+                  ? 'Respuesta recibida'
+                  : aiErrorDetail()
+                    ? 'Hubo un problema'
+                    : 'Esperando instrucciones'
+            }}
+          </strong>
+          <span class="tiny" *ngIf="aiSuggestion() as suggestion">
+            Fuente: {{ suggestion.source || 'gemini' }}{{ suggestion.model ? ' · ' + suggestion.model : '' }}
+          </span>
+          <span class="tiny" *ngIf="!aiSuggestion() && !aiGenerating() && !aiErrorDetail()">
+            Escribe el flujo o dicta una idea y luego presiona Generar.
+          </span>
+          <span class="tiny" *ngIf="aiErrorDetail()">{{ aiErrorDetail() }}</span>
+          <span class="tiny" *ngIf="!canUseVoice()">
+            Este navegador no deja usar voz en este momento. El texto sigue funcionando normal.
+          </span>
+          <span class="tiny" *ngIf="!voiceSupported() && recordingSupported()">
+            Si el dictado directo no aparece, usa grabación: se envía el audio a Gemini y luego se muestra la transcripción.
+          </span>
+        </div>
+        <form [formGroup]="aiForm" (ngSubmit)="generateAi()" class="form">
+          <div class="ai-strategy">
+            <label for="ai-strategy">Modo de propuesta</label>
+            <select id="ai-strategy" [value]="aiStrategy()" (change)="setAiStrategy($any($event.target).value)">
+              <option value="adapt">Adaptar a lo actual</option>
+              <option value="merge">Proponer aparte</option>
+              <option value="replace">Pensar reemplazo</option>
+            </select>
+          </div>
+          <textarea
+            rows="5"
+            formControlName="prompt"
+            placeholder="Ej. Inicio → Atención al cliente → Revisión técnica → Fin"
+          ></textarea>
+          <div class="row" style="gap: 8px; flex-wrap: wrap">
+            <button type="submit" class="btn primary" [disabled]="aiGenerating() || organizing()">
+              <app-icon name="sparkles" [size]="14" /> Generar
+            </button>
+            <button
+              type="button"
+              class="btn"
+              (click)="toggleVoice()"
+              [disabled]="!canUseVoice() || aiGenerating() || organizing()"
+              [title]="voiceSupported() ? 'Habla y la IA convertirá tu audio en texto' : recordingSupported() ? 'Graba audio y la IA lo interpretará' : 'La voz no está disponible aquí'"
+            >
+              <app-icon [name]="aiListening() ? 'stop' : 'mic'" [size]="14" />
+              {{ aiRecording() ? 'Detener grabación' : aiListening() ? 'Detener dictado' : voiceSupported() ? 'Capturar voz' : 'Grabar audio' }}
+            </button>
+          </div>
+        </form>
+
+        <article class="ai-preview" *ngIf="aiSuggestion() as suggestion">
+          <div class="preview-head">
+            <div>
+              <strong>{{ suggestion.title }}</strong>
+              <p class="muted tiny">{{ suggestion.summary }}</p>
+            </div>
+          </div>
+          <div class="transcript-box" *ngIf="suggestion.transcript">
+            <span class="eyebrow">Transcripción</span>
+            <p>{{ suggestion.transcript }}</p>
+          </div>
+          <div class="kv ai-metrics">
+            <div><span>Nodos</span><strong>{{ suggestion.nodes.length }}</strong></div>
+            <div><span>Rutas</span><strong>{{ suggestion.transitions.length }}</strong></div>
+            <div><span>Motor</span><strong>{{ suggestion.source || 'gemini' }}</strong></div>
+          </div>
+          <ul class="suggestion-list">
+            <li *ngFor="let n of suggestion.nodes; trackBy: trackSuggestionNode">
+              <span class="badge" [ngClass]="badgeForType(n.node_type)">{{ n.node_type }}</span>
+              <strong>{{ n.code }}</strong>
+              <span class="muted tiny">{{ n.name }} · {{ n.lane }}</span>
+            </li>
+          </ul>
+          <ul class="suggestion-routes">
+            <li *ngFor="let t of suggestion.transitions; trackBy: trackTransition">
+              <strong>{{ t.source_code }}</strong>
+              <span>→</span>
+              <strong>{{ t.target_code }}</strong>
+              <span class="badge neutral">{{ t.transition_type }}</span>
+              <span class="muted tiny" *ngIf="t.condition_label">· {{ t.condition_label }}</span>
+            </li>
+          </ul>
+          <div class="preview-actions">
+            <div class="preview-actions-row">
+              <button
+                type="button"
+                [class]="aiStrategy() === 'replace' ? 'btn danger block' : 'btn success block'"
+                (click)="aiStrategy() === 'replace' ? replaceWithAi() : applyAi()"
+                [disabled]="aiGenerating() || organizing()"
+              >
+                <ng-container *ngIf="aiStrategy() === 'replace'; else applyText">Reemplazar diagrama</ng-container>
+                <ng-template #applyText>
+                  <app-icon name="check" [size]="14" /> Aplicar esta propuesta
+                </ng-template>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <section class="ai-history" *ngIf="aiHistory().length">
+          <header class="mini-head">
+            <span class="eyebrow">Actividad reciente</span>
+            <strong>Lo que hizo la IA</strong>
+          </header>
+          <article class="history-item" *ngFor="let item of aiHistory(); trackBy: trackAiHistory">
+            <div class="history-top">
+              <span class="badge" [ngClass]="item.status === 'success' ? 'success' : item.status === 'fallback' ? 'warn' : 'danger'">
+                {{ item.mode === 'voice' ? 'voz' : 'texto' }}
+              </span>
+              <strong>{{ item.title }}</strong>
+              <span class="muted tiny">{{ item.at }}</span>
+            </div>
+            <p class="muted tiny">{{ item.detail }}</p>
+          </article>
+        </section>
+      </section>
+    </aside>
+  </section>
+</section>
+
+<ng-template #loadingTpl>
+  <div class="empty">
+    <div class="icon-wrap"><app-icon name="clock" [size]="20" /></div>
+    <strong>Cargando política…</strong>
+  </div>
+</ng-template>

@@ -1,0 +1,149 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <span class="eyebrow">Diseño de procesos</span>
+      <h1>Políticas de negocio</h1>
+      <p class="muted">
+        Crea, valida y publica políticas. Cada política es un diagrama de actividades con calles,
+        decisiones y rutas. Cuando la publiques, los trámites se enrutarán solos.
+      </p>
+    </div>
+    <button type="button" class="btn primary" (click)="toggleCreate()">
+      <app-icon [name]="showCreate() ? 'x' : 'plus'" [size]="14" />
+      <span>{{ showCreate() ? 'Cancelar' : 'Nueva política' }}</span>
+    </button>
+  </header>
+
+  <section class="card card-pad create-form" *ngIf="showCreate()">
+    <div class="block-head">
+      <span class="eyebrow">Nueva política</span>
+      <h3>Define los datos básicos</h3>
+      <p class="muted tiny">Después podrás diseñar el flujo paso a paso en el editor visual.</p>
+    </div>
+    <form [formGroup]="form" (ngSubmit)="createPolicy()" class="form-grid">
+      <div class="field">
+        <label>Nombre</label>
+        <input type="text" formControlName="name" placeholder="Ej. Apertura de cuenta corriente" />
+      </div>
+      <div class="field">
+        <label>Tipo de trámite (clave)</label>
+        <input type="text" formControlName="procedure_type" placeholder="ej. apertura_cuenta" />
+      </div>
+      <div class="field full">
+        <label>Descripción</label>
+        <textarea
+          rows="3"
+          formControlName="description"
+          placeholder="Resumen del propósito y alcance de la política"
+        ></textarea>
+      </div>
+      <div class="form-actions full">
+        <button type="button" class="btn ghost" (click)="toggleCreate()">Cancelar</button>
+        <button type="submit" class="btn primary" [disabled]="creating() || form.invalid">
+          <app-icon name="plus" [size]="14" /> Crear y diseñar
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <div class="meter-row">
+    <article class="meter">
+      <span>Total</span>
+      <strong>{{ stats().total }}</strong>
+    </article>
+    <article class="meter">
+      <span>Borrador</span>
+      <strong>{{ stats().borrador }}</strong>
+      <small class="badge neutral dot">En diseño</small>
+    </article>
+    <article class="meter">
+      <span>Validadas</span>
+      <strong>{{ stats().validada }}</strong>
+      <small class="badge info dot">Listas</small>
+    </article>
+    <article class="meter">
+      <span>Publicadas</span>
+      <strong>{{ stats().publicada }}</strong>
+      <small class="badge success dot">Operando</small>
+    </article>
+    <article class="meter">
+      <span>Archivadas</span>
+      <strong>{{ stats().archivada }}</strong>
+      <small class="badge danger dot">Inactivas</small>
+    </article>
+  </div>
+
+  <section class="filters card card-pad-sm">
+    <div class="search">
+      <app-icon name="search" [size]="16" />
+      <input
+        type="text"
+        placeholder="Buscar por nombre, tipo o descripción…"
+        [value]="search()"
+        (input)="updateSearch($event)"
+      />
+    </div>
+    <div class="segmented">
+      <button type="button" [class.active]="statusFilter() === 'all'" (click)="setStatus('all')">Todas</button>
+      <button type="button" [class.active]="statusFilter() === 'borrador'" (click)="setStatus('borrador')">Borrador</button>
+      <button type="button" [class.active]="statusFilter() === 'validada'" (click)="setStatus('validada')">Validada</button>
+      <button type="button" [class.active]="statusFilter() === 'publicada'" (click)="setStatus('publicada')">Publicada</button>
+      <button type="button" [class.active]="statusFilter() === 'archivada'" (click)="setStatus('archivada')">Archivada</button>
+    </div>
+    <button type="button" class="btn ghost sm" (click)="refresh()">
+      <app-icon name="refresh" [size]="14" /> Actualizar
+    </button>
+  </section>
+
+  <section class="grid-cards" *ngIf="filtered().length; else emptyTpl">
+    <article class="policy-card" *ngFor="let policy of filtered()" (click)="open(policy)">
+      <header class="card-head">
+        <div>
+          <strong>{{ policy.name }}</strong>
+          <span class="muted tiny">{{ policy.procedure_type }} · v{{ policy.version }}</span>
+        </div>
+        <span class="badge" [ngClass]="statusBadge(policy.status)">
+          <span class="dot"></span>{{ policy.status }}
+        </span>
+      </header>
+      <p class="description">{{ policy.description }}</p>
+      <div class="card-stats">
+        <span>
+          <app-icon name="layers" [size]="14" /> {{ policy.nodes.length }} nodos
+        </span>
+        <span>
+          <app-icon name="flow" [size]="14" /> {{ policy.transitions.length }} rutas
+        </span>
+      </div>
+      <div class="card-actions" (click)="$event.stopPropagation()">
+        <button type="button" class="btn sm" (click)="open(policy)">
+          <app-icon name="edit" [size]="14" /> Diseñar
+        </button>
+        <button type="button" class="btn sm" (click)="validate($event, policy)">
+          <app-icon name="check" [size]="14" /> Validar
+        </button>
+        <button
+          type="button"
+          class="btn sm primary"
+          (click)="publish($event, policy)"
+          [disabled]="policy.status === 'publicada'"
+        >
+          <app-icon name="send" [size]="14" /> Publicar
+        </button>
+      </div>
+    </article>
+  </section>
+
+  <ng-template #emptyTpl>
+    <div class="empty">
+      <div class="icon-wrap"><app-icon name="workflow" [size]="22" /></div>
+      <strong>{{ search() ? 'Sin resultados' : 'Aún no hay políticas' }}</strong>
+      <span class="tiny">
+        {{ search() ? 'Prueba con otro término o cambia el filtro.' : 'Comienza creando tu primera política de negocio.' }}
+      </span>
+      <button *ngIf="!search()" type="button" class="btn primary sm" (click)="toggleCreate()">
+        <app-icon name="plus" [size]="14" /> Crear política
+      </button>
+    </div>
+  </ng-template>
+</section>
