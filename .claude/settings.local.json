@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(flutter --version)",
-      "Read(//c/Users/Eduardo/Desktop/Primer Parcial/**)",
-      "Bash(flutter create *)"
-    ]
-  }
-}

@@ -49,6 +49,8 @@ frontend/ng.err.log
 # ===== IDE / OS =====
 .vscode/
 .idea/
+.claude/
+.cursor/
 .DS_Store
 Thumbs.db
 *.swp
