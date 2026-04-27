@@ -88,6 +88,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   readonly aiSuggestion = signal<WorkflowSuggestion | null>(null);
   readonly aiStatus = signal('Describe el flujo en lenguaje natural y la IA propondrá los nodos.');
   readonly aiListening = signal(false);
+  readonly aiLiveTranscript = signal('');
   readonly aiGenerating = signal(false);
   readonly aiErrorDetail = signal<string | null>(null);
   readonly aiHistory = signal<AIHistoryItem[]>([]);
@@ -260,7 +261,22 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     initialOffsetY?: number;
   } | null = null;
   private mediaRecorder: MediaRecorder | null = null;
+  private speechRecognition:
+    | {
+        lang: string;
+        interimResults: boolean;
+        continuous: boolean;
+        maxAlternatives: number;
+        start: () => void;
+        stop: () => void;
+        onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string; isFinal?: boolean }>> }) => void) | null;
+        onend: (() => void) | null;
+        onerror: ((event: { error: string }) => void) | null;
+      }
+    | null = null;
   private audioChunks: Blob[] = [];
+  private speechBasePrompt = '';
+  private speechFinalPrompt = '';
   private pendingMouseEvent: MouseEvent | null = null;
   private animationFrameId: number | null = null;
   private refreshTimerId: number | null = null;
@@ -290,6 +306,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   }
 
   ngOnDestroy(): void {
+    this.speechRecognition?.stop();
     if (this.refreshTimerId !== null) {
       window.clearInterval(this.refreshTimerId);
       this.refreshTimerId = null;
@@ -741,10 +758,27 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   }
 
   toggleVoice(): void {
+    if (this.voiceSupported()) {
+      this.toggleSpeechDictation();
+      return;
+    }
     if (this.recordingSupported()) {
       void this.toggleAudioRecording();
       return;
     }
+    this.aiStatus.set('Este navegador no expone dictado directo ni grabación.');
+    this.aiErrorDetail.set(
+      'Aquí no hay soporte de voz disponible. Puedes seguir escribiendo el flujo manualmente.'
+    );
+  }
+
+  private toggleSpeechDictation(): void {
+    if (this.aiListening() && this.speechRecognition) {
+      this.aiStatus.set('Deteniendo dictado...');
+      this.speechRecognition.stop();
+      return;
+    }
+
     const Ctor =
       (window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition ||
       (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
@@ -757,32 +791,49 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       return;
     }
 
-    if (this.aiListening()) {
-      this.aiListening.set(false);
-      this.aiStatus.set('Captura detenida.');
-      return;
-    }
-
     const recognition = new (Ctor as new () => {
       lang: string;
       interimResults: boolean;
+      continuous: boolean;
       maxAlternatives: number;
       start: () => void;
       stop: () => void;
-      onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+      onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string; isFinal?: boolean }>> }) => void) | null;
       onend: (() => void) | null;
       onerror: ((event: { error: string }) => void) | null;
     })();
 
-    recognition.lang = 'es-ES';
-    recognition.interimResults = false;
+    this.speechRecognition = recognition;
+    this.speechBasePrompt = this.aiForm.getRawValue().prompt?.trim() ?? '';
+    this.speechFinalPrompt = '';
+    this.aiLiveTranscript.set('');
+    this.aiErrorDetail.set(null);
+
+    recognition.lang = 'es-BO';
+    recognition.interimResults = true;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? '';
-      this.aiForm.patchValue({ prompt: transcript });
-      this.aiErrorDetail.set(null);
-      this.aiStatus.set('Listo, edita el texto si quieres y genera la propuesta.');
-      this.pushAiHistory('voice', 'success', 'Voz capturada', transcript);
+      let finalChunk = '';
+      let interimChunk = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index] as unknown as { 0?: { transcript?: string }; isFinal?: boolean };
+        const transcript = result?.[0]?.transcript?.trim() ?? '';
+        if (!transcript) continue;
+        if (result.isFinal) {
+          finalChunk += `${transcript} `;
+        } else {
+          interimChunk += `${transcript} `;
+        }
+      }
+
+      this.speechFinalPrompt = `${this.speechFinalPrompt} ${finalChunk}`.trim();
+      const finalized = `${this.speechBasePrompt} ${this.speechFinalPrompt}`.trim();
+      const live = `${finalized} ${interimChunk}`.trim();
+
+      this.aiLiveTranscript.set(interimChunk.trim());
+      this.aiForm.patchValue({ prompt: live || finalized || this.speechBasePrompt });
+      this.aiStatus.set(interimChunk.trim() ? 'Escuchando y escribiendo en vivo...' : 'Voz capturada. Sigue hablando o detén el dictado cuando termines.');
     };
     recognition.onerror = (event) => {
       this.aiStatus.set(`No se pudo capturar voz: ${event.error}.`);
@@ -791,10 +842,21 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       );
       this.pushAiHistory('voice', 'error', 'Error de voz', event.error);
       this.aiListening.set(false);
+      this.aiLiveTranscript.set('');
+      this.speechRecognition = null;
     };
-    recognition.onend = () => this.aiListening.set(false);
+    recognition.onend = () => {
+      const finalPrompt = this.aiForm.getRawValue().prompt?.trim() ?? '';
+      this.aiListening.set(false);
+      this.aiLiveTranscript.set('');
+      this.speechRecognition = null;
+      this.aiStatus.set(finalPrompt ? 'Dictado finalizado. Revisa el texto y luego genera la propuesta.' : 'No se capturó texto útil. Puedes intentarlo otra vez o escribir el flujo manualmente.');
+      if (finalPrompt) {
+        this.pushAiHistory('voice', 'success', 'Voz capturada', finalPrompt);
+      }
+    };
     this.aiListening.set(true);
-    this.aiStatus.set('Escuchando…');
+    this.aiStatus.set('Escuchando y escribiendo en vivo...');
     recognition.start();
   }
 

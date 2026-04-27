@@ -541,6 +541,13 @@
             formControlName="prompt"
             placeholder="Ej. Inicio → Atención al cliente → Revisión técnica → Fin"
           ></textarea>
+          <div class="live-transcript" *ngIf="aiListening() || aiLiveTranscript()">
+            <span class="eyebrow">Dictado en vivo</span>
+            <strong>{{ aiListening() ? 'Escuchando ahora' : 'Último fragmento capturado' }}</strong>
+            <p class="muted tiny">
+              {{ aiLiveTranscript() || 'El texto debería ir apareciendo en el cuadro mientras hablas.' }}
+            </p>
+          </div>
           <div class="row" style="gap: 8px; flex-wrap: wrap">
             <button type="submit" class="btn primary" [disabled]="aiGenerating() || organizing()">
               <app-icon name="sparkles" [size]="14" /> Generar
