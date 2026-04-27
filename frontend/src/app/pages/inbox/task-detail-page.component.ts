@@ -173,9 +173,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       );
       this.aiSuggestion.set(response.data);
       this.aiStatus.set('La IA preparó una propuesta de llenado. Revísala y aplícala si te sirve.');
-      if (response.data.source?.startsWith('fallback')) {
-        this.aiError.set('Gemini no devolvió una estructura perfecta y se usó una propuesta base revisable.');
-      }
+      this.aiError.set(this.describeAiSource(response.data.source));
     } catch (error) {
       const message =
         error instanceof HttpErrorResponse
@@ -470,11 +468,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       }
       this.aiLiveTranscript.set('');
       this.aiStatus.set('La IA preparó una propuesta a partir del archivo de audio.');
-      this.aiError.set(
-        response.data.source?.startsWith('fallback')
-          ? 'Gemini no devolvió una estructura perfecta y se usó una propuesta base revisable.'
-          : null
-      );
+      this.aiError.set(this.describeAiSource(response.data.source));
     } catch (error) {
       const message =
         error instanceof HttpErrorResponse
@@ -509,11 +503,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
       }
       this.aiLiveTranscript.set('');
       this.aiStatus.set('La IA preparó una propuesta a partir del audio.');
-      this.aiError.set(
-        response.data.source?.startsWith('fallback')
-          ? 'Gemini no devolvió una estructura perfecta y se usó una propuesta base revisable.'
-          : null
-      );
+      this.aiError.set(this.describeAiSource(response.data.source));
     } catch (error) {
       const message =
         error instanceof HttpErrorResponse
@@ -600,5 +590,16 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   updateObservation(event: Event): void {
     const value = (event.target as HTMLTextAreaElement).value;
     this.observation.set(value);
+  }
+
+  private describeAiSource(source?: string | null): string | null {
+    if (!source) return null;
+    if (source.startsWith('fallback-quota')) {
+      return 'Gemini alcanzó su cuota temporal. El sistema armó una propuesta local con los datos que pudo inferir.';
+    }
+    if (source.startsWith('fallback')) {
+      return 'Gemini no devolvió una estructura perfecta y se usó una propuesta base revisable.';
+    }
+    return null;
   }
 }

@@ -1,4 +1,5 @@
 import json
+import re
 from urllib import error, parse, request
 
 from fastapi import HTTPException
@@ -229,10 +230,9 @@ def generate_task_form_fill(payload: TaskFormFillRequest) -> TaskFormFillRespons
         raise HTTPException(status_code=503, detail="Gemini no esta configurado en el backend")
     try:
         raw = _request_gemini(_build_task_fill_prompt(payload), response_schema=None)
-    except HTTPException:
+    except HTTPException as exc:
         fallback = _fallback_task_form_fill(payload)
-        fallback.source = "fallback"
-        fallback.model = settings.gemini_model
+        _mark_task_fill_failure(fallback, exc.detail if hasattr(exc, "detail") else None)
         return fallback
     try:
         parsed = _parse_gemini_candidate(raw)
@@ -271,7 +271,7 @@ def generate_task_form_fill_from_audio(payload: TaskFormFillAudioRequest) -> Tas
             inline_audio={"mimeType": payload.mime_type, "data": payload.audio_base64},
             response_schema=None,
         )
-    except HTTPException:
+    except HTTPException as exc:
         fallback = _fallback_task_form_fill(
             TaskFormFillRequest(
                 report_text="Gemini no estuvo disponible. Se genero una propuesta base desde audio.",
@@ -284,9 +284,7 @@ def generate_task_form_fill_from_audio(payload: TaskFormFillAudioRequest) -> Tas
                 fields=payload.fields,
             )
         )
-        fallback.source = "fallback-audio"
-        fallback.model = settings.gemini_model
-        fallback.transcript = "Gemini no estuvo disponible y se uso una propuesta base desde audio."
+        _mark_task_fill_failure(fallback, exc.detail if hasattr(exc, "detail") else None, audio=True)
         return fallback
     try:
         parsed = _parse_gemini_candidate(raw)
@@ -324,6 +322,21 @@ def generate_task_form_fill_from_audio(payload: TaskFormFillAudioRequest) -> Tas
         fallback.model = settings.gemini_model
         fallback.transcript = "No se pudo estructurar la respuesta de audio. Se uso una propuesta base."
         return fallback
+
+
+def _mark_task_fill_failure(response: TaskFormFillResponse, detail: str | None, audio: bool = False) -> None:
+    quota_exceeded = bool(detail and ("429" in detail or "quota" in detail.lower() or "resource_exhausted" in detail.lower()))
+    response.model = settings.gemini_model
+    if quota_exceeded:
+        response.source = "fallback-quota-audio" if audio else "fallback-quota"
+        response.summary = "Gemini alcanzo su cuota temporal y se uso un llenado local revisable."
+        response.observations = "Se detecto limite de cuota en Gemini. El sistema completo los datos que pudo inferir localmente."
+        if audio:
+            response.transcript = "Gemini alcanzo su cuota temporal y no pudo transcribir el audio."
+    else:
+        response.source = "fallback-audio" if audio else "fallback"
+        if audio:
+            response.transcript = "Gemini no estuvo disponible y se uso una propuesta base desde audio."
 
 
 def _extract_json_text(text: str) -> str:
@@ -480,6 +493,8 @@ def _fallback_task_form_fill(payload: TaskFormFillRequest) -> TaskFormFillRespon
                 if option.lower() in report_lower:
                     value = option
                     break
+        elif field.field_type in {"texto", "archivo", "imagen"}:
+            value = _infer_textual_field_value(field.key, field.label, payload.report_text)
         else:
             value = ""
         form_data[field.key] = value
@@ -491,6 +506,55 @@ def _fallback_task_form_fill(payload: TaskFormFillRequest) -> TaskFormFillRespon
         observations="La IA no devolvio una estructura perfecta y se preparo un llenado inicial revisable.",
         form_data=form_data,
     )
+
+
+def _infer_textual_field_value(field_key: str, field_label: str, report_text: str) -> str:
+    key = f"{field_key} {field_label}".lower()
+    if any(token in key for token in ["telefon", "celular", "movil", "contacto"]):
+        return _extract_phone(report_text)
+    if any(token in key for token in ["direccion", "domicilio", "ubicacion", "ubicación"]):
+        return _extract_address(report_text)
+    if "nombre" in key:
+        return _extract_name(report_text)
+    if "document" in key or "ci" in key or "cedula" in key or "carnet" in key:
+        return _extract_document(report_text)
+    return ""
+
+
+def _extract_phone(text: str) -> str:
+    labeled = re.search(r"(?:telefono|teléfono|celular|contacto|telf\.?)\s*(?:es|:)?\s*(\+?\d[\d\s-]{6,})", text, re.IGNORECASE)
+    if labeled:
+        return re.sub(r"[^\d+]", "", labeled.group(1)).strip()
+    generic = re.search(r"(\+?\d[\d\s-]{6,}\d)", text)
+    if generic:
+        return re.sub(r"[^\d+]", "", generic.group(1)).strip()
+    return ""
+
+
+def _extract_address(text: str) -> str:
+    patterns = [
+        r"(?:domicilio(?: de)?|direccion|dirección|ubicado en|vive en|en la direccion)\s*(?:es|:)?\s*([^.;\n]+)",
+        r"((?:avenida|av\.?|calle|zona|barrio|urbanizacion|urbanización)\s+[^.;\n]+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip(" ,.-")
+    return ""
+
+
+def _extract_name(text: str) -> str:
+    match = re.search(r"(?:cliente|solicitante|senor|señor|senora|señora)\s+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ]+\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ]+){0,2})", text)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def _extract_document(text: str) -> str:
+    match = re.search(r"(?:ci|c\.i\.|documento|carnet|cedula|cédula)\s*(?:es|:)?\s*([A-Za-z0-9-]{5,})", text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return ""
 
 
 def _merge_task_fill_with_fallback(response: TaskFormFillResponse, payload: TaskFormFillRequest) -> TaskFormFillResponse:
