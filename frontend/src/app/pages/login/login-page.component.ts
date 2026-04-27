@@ -10,7 +10,6 @@ import { IconComponent } from '../../shared/icon.component';
 
 interface QuickAccount {
   email: string;
-  password: string;
   role: string;
   description: string;
 }
@@ -34,14 +33,13 @@ export class LoginPageComponent {
   readonly showPassword = signal(false);
 
   readonly form = this.fb.group({
-    email: ['admin@workflowia.com', [Validators.required, Validators.email]],
-    password: ['Admin12345', [Validators.required]]
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required]]
   });
 
   readonly quickAccounts: QuickAccount[] = [
     {
       email: 'admin@workflowia.com',
-      password: 'Admin12345',
       role: 'Administrador',
       description: 'Diseña políticas, gestiona usuarios y ve toda la operación.'
     }
@@ -75,7 +73,7 @@ export class LoginPageComponent {
   }
 
   useQuickAccount(account: QuickAccount): void {
-    this.form.patchValue({ email: account.email, password: account.password });
+    this.form.patchValue({ email: account.email });
   }
 
   submit(): void {
