@@ -5,10 +5,11 @@
         <app-icon name="arrowLeft" [size]="14" /> Volver a la bandeja
       </button>
       <div class="head-actions">
-        <button type="button" class="btn sm" (click)="saveProgress()" [disabled]="saving()">
+        <button *ngIf="canEditTask()" type="button" class="btn sm" (click)="saveProgress()" [disabled]="saving()">
           <app-icon name="doc" [size]="14" /> Guardar avance
         </button>
         <button
+          *ngIf="canCompleteTask()"
           type="button"
           class="btn primary sm"
           (click)="completeTask()"
@@ -66,19 +67,20 @@
                   [formControlName]="field.key"
                   rows="3"
                   placeholder="Escribe aquí…"
+                  [readonly]="!canEditTask()"
                 ></textarea>
 
-                <input *ngSwitchCase="'numero'" type="number" [formControlName]="field.key" />
+                <input *ngSwitchCase="'numero'" type="number" [formControlName]="field.key" [readonly]="!canEditTask()" />
 
-                <input *ngSwitchCase="'fecha'" type="date" [formControlName]="field.key" />
+                <input *ngSwitchCase="'fecha'" type="date" [formControlName]="field.key" [readonly]="!canEditTask()" />
 
-                <select *ngSwitchCase="'lista'" [formControlName]="field.key">
+                <select *ngSwitchCase="'lista'" [formControlName]="field.key" [disabled]="!canEditTask()">
                   <option value="">Selecciona una opción…</option>
                   <option *ngFor="let opt of field.options" [value]="opt">{{ opt }}</option>
                 </select>
 
                 <label *ngSwitchCase="'booleano'" class="check-row">
-                  <input type="checkbox" [formControlName]="field.key" />
+                  <input type="checkbox" [formControlName]="field.key" [disabled]="!canEditTask()" />
                   <span class="muted tiny">Marca si aplica</span>
                 </label>
 
@@ -87,6 +89,7 @@
                   type="text"
                   [formControlName]="field.key"
                   placeholder="URL o nombre del archivo cargado"
+                  [readonly]="!canEditTask()"
                 />
 
                 <input
@@ -94,9 +97,10 @@
                   type="text"
                   [formControlName]="field.key"
                   placeholder="URL de la imagen o referencia"
+                  [readonly]="!canEditTask()"
                 />
 
-                <input *ngSwitchDefault type="text" [formControlName]="field.key" />
+                <input *ngSwitchDefault type="text" [formControlName]="field.key" [readonly]="!canEditTask()" />
               </div>
             </ng-container>
           </form>
@@ -119,10 +123,11 @@
             placeholder="Anota detalles, decisiones o motivos relevantes…"
             [value]="observation()"
             (input)="updateObservation($event)"
+            [readonly]="!canEditTask()"
           ></textarea>
         </div>
 
-        <section class="evidence-block">
+        <section class="evidence-block" *ngIf="canUploadEvidence()">
           <header class="block-head">
             <span class="eyebrow">Evidencias</span>
             <h3>Adjunta respaldo del trabajo realizado</h3>
@@ -143,7 +148,7 @@
               [value]="evidenceNote()"
               (input)="updateEvidenceNote($event)"
             />
-            <button type="button" class="btn sm" (click)="uploadEvidence()" [disabled]="uploadingEvidence()">
+            <button type="button" class="btn sm" (click)="uploadEvidence()" [disabled]="uploadingEvidence() || !canUploadEvidence()">
               <app-icon name="upload" [size]="14" /> {{ uploadingEvidence() ? 'Cargando...' : 'Subir evidencia' }}
             </button>
           </div>

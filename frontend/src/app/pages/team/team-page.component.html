@@ -15,6 +15,7 @@
     <header class="block-head">
       <span class="eyebrow">Alta de usuario</span>
       <h3>Datos del nuevo miembro</h3>
+      <p class="muted tiny">El administrador define la contraseña inicial. Luego el usuario entra por login con esa cuenta.</p>
     </header>
     <form [formGroup]="form" (ngSubmit)="submit()" class="form">
       <div class="row two">
@@ -110,52 +111,149 @@
           <th>Departamento</th>
           <th>Rol</th>
           <th>Plan</th>
+          <th>Permisos</th>
           <th class="right">Acciones</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let user of filtered()">
-          <td>
-            <div class="user-cell">
-              <span class="avatar">{{ initials(user.full_name) }}</span>
-              <div>
-                <strong>{{ user.full_name }}</strong>
-                <span class="muted tiny">{{ user.email }}</span>
+        <ng-container *ngFor="let user of filtered()">
+          <tr>
+            <td>
+              <div class="user-cell">
+                <span class="avatar">{{ initials(user.full_name) }}</span>
+                <div>
+                  <strong>{{ user.full_name }}</strong>
+                  <span class="muted tiny">{{ user.email }}</span>
+                </div>
               </div>
-            </div>
-          </td>
-          <td>{{ user.department || '—' }}</td>
-          <td>
-            <span class="badge" [ngClass]="badgeForRole(user.role)">{{ user.role }}</span>
-          </td>
-          <td>
-            <span class="badge" [ngClass]="badgeForPlan(user.subscription_plan)">
-              {{ user.subscription_plan || 'starter' }}
-            </span>
-          </td>
-          <td class="right">
-            <div class="plan-actions">
-              <button
-                type="button"
-                class="btn ghost sm"
-                (click)="changePlan(user, 'starter')"
-                [disabled]="user.subscription_plan === 'starter'"
-              >Starter</button>
-              <button
-                type="button"
-                class="btn ghost sm"
-                (click)="changePlan(user, 'pro')"
-                [disabled]="user.subscription_plan === 'pro'"
-              >Pro</button>
-              <button
-                type="button"
-                class="btn ghost sm"
-                (click)="changePlan(user, 'enterprise')"
-                [disabled]="user.subscription_plan === 'enterprise'"
-              >Enterprise</button>
-            </div>
-          </td>
-        </tr>
+            </td>
+            <td>{{ user.department || '—' }}</td>
+            <td>
+              <span class="badge" [ngClass]="badgeForRole(user.role)">{{ user.role }}</span>
+              <span class="muted tiny block">{{ user.status || 'activo' }}</span>
+            </td>
+            <td>
+              <span class="badge" [ngClass]="badgeForPlan(user.subscription_plan)">
+                {{ user.subscription_plan || 'starter' }}
+              </span>
+            </td>
+            <td>
+              <span class="badge neutral">{{ permissionCount(user) }} accesos</span>
+            </td>
+            <td class="right">
+              <div class="plan-actions">
+                <button type="button" class="btn ghost sm" (click)="startEdit(user)">Editar</button>
+                <button
+                  type="button"
+                  class="btn ghost sm"
+                  (click)="changePlan(user, 'starter')"
+                  [disabled]="user.subscription_plan === 'starter'"
+                >Starter</button>
+                <button
+                  type="button"
+                  class="btn ghost sm"
+                  (click)="changePlan(user, 'pro')"
+                  [disabled]="user.subscription_plan === 'pro'"
+                >Pro</button>
+                <button
+                  type="button"
+                  class="btn ghost sm"
+                  (click)="changePlan(user, 'enterprise')"
+                  [disabled]="user.subscription_plan === 'enterprise'"
+                >Enterprise</button>
+              </div>
+            </td>
+          </tr>
+          <tr *ngIf="editingUserId() === user._id">
+            <td colspan="6" class="edit-row">
+              <section class="edit-card">
+                <header class="block-head">
+                  <span class="eyebrow">Edición de usuario</span>
+                  <h3>{{ user.full_name }}</h3>
+                  <p class="muted tiny">Puedes cambiar perfil, contraseña inicial y qué módulos o acciones puede usar.</p>
+                </header>
+                <form [formGroup]="editForm" class="form" (ngSubmit)="saveEdit(user)">
+                  <div class="row two">
+                    <div class="field">
+                      <label>Nombre completo</label>
+                      <input type="text" formControlName="full_name" />
+                    </div>
+                    <div class="field">
+                      <label>Correo</label>
+                      <input type="email" formControlName="email" />
+                    </div>
+                  </div>
+                  <div class="row two">
+                    <div class="field">
+                      <label>Nueva contraseña</label>
+                      <input type="password" formControlName="password" placeholder="Déjala vacía para conservar la actual" />
+                    </div>
+                    <div class="field">
+                      <label>Departamento</label>
+                      <input type="text" formControlName="department" />
+                    </div>
+                  </div>
+                  <div class="row three">
+                    <div class="field">
+                      <label>Rol</label>
+                      <select formControlName="role">
+                        <option value="administrador">Administrador</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="funcionario">Funcionario</option>
+                        <option value="cliente">Cliente</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Plan</label>
+                      <select formControlName="subscription_plan">
+                        <option value="starter">Starter</option>
+                        <option value="pro">Pro</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Estado</label>
+                      <select formControlName="status">
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="permissions-panel">
+                    <div class="permissions-head">
+                      <div>
+                        <strong>Acciones y pantallas</strong>
+                        <p class="muted tiny">Activa exactamente lo que este usuario puede ver o ejecutar.</p>
+                      </div>
+                      <button type="button" class="btn ghost sm" (click)="applyRoleDefaults(user)">Usar permisos del rol</button>
+                    </div>
+                    <div class="permissions-grid">
+                      <label class="perm-item" *ngFor="let permission of permissionOptions">
+                        <input
+                          type="checkbox"
+                          [checked]="hasPermission(user, permission.key)"
+                          (change)="togglePermission(user, permission.key)"
+                        />
+                        <div>
+                          <strong>{{ permission.label }}</strong>
+                          <span class="muted tiny">{{ permission.description }}</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="row" style="justify-content: flex-end; gap: 8px">
+                    <button type="button" class="btn ghost" (click)="cancelEdit()">Cancelar</button>
+                    <button type="submit" class="btn primary">
+                      <app-icon name="check" [size]="14" /> Guardar cambios
+                    </button>
+                  </div>
+                </form>
+              </section>
+            </td>
+          </tr>
+        </ng-container>
       </tbody>
     </table>
   </section>

@@ -231,6 +231,24 @@
   .muted.tiny { display: block; margin-top: 2px; }
 }
 
+.edit-row {
+  padding: 0 !important;
+  background: var(--bg-surface-2);
+}
+
+.edit-card {
+  padding: 18px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 16px;
+}
+
+.row.three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .user-cell {
   display: flex;
   align-items: center;
@@ -260,9 +278,56 @@
   justify-content: flex-end;
 }
 
+.permissions-panel {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--bg-surface-2);
+  display: grid;
+  gap: 14px;
+}
+
+.permissions-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.perm-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+
+  input {
+    margin-top: 2px;
+  }
+
+  strong {
+    display: block;
+    font-size: 13px;
+  }
+
+  span {
+    display: block;
+  }
+}
+
 @media (max-width: 900px) {
   .meter-row { grid-template-columns: repeat(2, 1fr); }
   .create-card .form .row.two { grid-template-columns: 1fr; }
+  .row.three,
+  .permissions-grid { grid-template-columns: 1fr; }
 
   .plan-actions {
     justify-content: flex-start;

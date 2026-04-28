@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../../core/api.service';
 import { EvidenceItem, Policy, PolicyNode, Task, TaskFormFillSuggestion, Tramite } from '../../core/api.models';
+import { SessionService } from '../../core/session.service';
 import { ToastService } from '../../core/toast.service';
 import { IconComponent } from '../../shared/icon.component';
 
@@ -32,6 +33,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  readonly session = inject(SessionService);
 
   readonly task = signal<Task | null>(null);
   readonly tramite = signal<Tramite | null>(null);
@@ -152,6 +154,18 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
 
   back(): void {
     this.router.navigateByUrl('/app/inbox');
+  }
+
+  canEditTask(): boolean {
+    return this.session.hasPermission('task.edit');
+  }
+
+  canCompleteTask(): boolean {
+    return this.session.hasPermission('task.complete');
+  }
+
+  canUploadEvidence(): boolean {
+    return this.session.hasPermission('task.evidence');
   }
 
   async generateAiFill(): Promise<void> {

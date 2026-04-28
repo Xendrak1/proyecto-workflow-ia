@@ -115,7 +115,7 @@
               <button type="button" class="btn sm" (click)="openTask(task)">
                 <app-icon name="edit" [size]="14" /> Atender
               </button>
-              <button type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
+              <button *ngIf="session.hasPermission('task.complete')" type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
                 <app-icon name="check" [size]="14" /> Completar
               </button>
             </div>
@@ -154,7 +154,7 @@
               <button type="button" class="btn sm" (click)="openTask(task)">
                 <app-icon name="edit" [size]="14" /> Continuar
               </button>
-              <button type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
+              <button *ngIf="session.hasPermission('task.complete')" type="button" class="btn sm success" (click)="completeTaskQuick($event, task)">
                 <app-icon name="check" [size]="14" /> Completar
               </button>
             </div>

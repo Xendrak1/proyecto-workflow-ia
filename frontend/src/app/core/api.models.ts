@@ -1,3 +1,5 @@
+import type { PermissionKey } from './session.service';
+
 export interface ApiResponse<T> {
   message: string;
   data: T;
@@ -12,6 +14,7 @@ export interface LoginResponse {
   subscription_plan: string;
   user_id: string;
   department: string | null;
+  permissions?: PermissionKey[];
 }
 
 export interface User {
@@ -22,6 +25,7 @@ export interface User {
   department?: string | null;
   status?: string;
   subscription_plan?: string;
+  permissions?: PermissionKey[];
 }
 
 export interface Policy {

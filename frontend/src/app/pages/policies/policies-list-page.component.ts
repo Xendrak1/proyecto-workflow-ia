@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import { Policy } from '../../core/api.models';
+import { SessionService } from '../../core/session.service';
 import { ToastService } from '../../core/toast.service';
 import { IconComponent } from '../../shared/icon.component';
 
@@ -34,6 +35,7 @@ export class PoliciesListPageComponent implements OnDestroy {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly zone = inject(NgZone);
+  readonly session = inject(SessionService);
 
   readonly policies = signal<Policy[]>([]);
   readonly loading = signal(true);
@@ -132,6 +134,7 @@ export class PoliciesListPageComponent implements OnDestroy {
   }
 
   toggleCreate(): void {
+    if (!this.canCreatePolicies()) return;
     this.showCreate.update((value) => !value);
     if (this.tourOpen()) {
       setTimeout(() => this.syncTourPosition(), 0);
@@ -142,7 +145,23 @@ export class PoliciesListPageComponent implements OnDestroy {
     this.router.navigate(['/app/policies', policy._id]);
   }
 
+  canCreatePolicies(): boolean {
+    return this.session.hasPermission('policy.create');
+  }
+
+  canValidatePolicies(): boolean {
+    return this.session.hasPermission('policy.validate');
+  }
+
+  canPublishPolicies(): boolean {
+    return this.session.hasPermission('policy.publish');
+  }
+
   createPolicy(): void {
+    if (!this.canCreatePolicies()) {
+      this.toast.warn('No tienes permiso para crear políticas');
+      return;
+    }
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -169,6 +188,10 @@ export class PoliciesListPageComponent implements OnDestroy {
 
   validate(event: Event, policy: Policy): void {
     event.stopPropagation();
+    if (!this.canValidatePolicies()) {
+      this.toast.warn('No tienes permiso para validar políticas');
+      return;
+    }
     this.api.validatePolicy(policy._id).subscribe({
       next: (response) => {
         if (response.data.valid) this.toast.success('Política validada', 'Está lista para publicarse');
@@ -180,6 +203,10 @@ export class PoliciesListPageComponent implements OnDestroy {
 
   publish(event: Event, policy: Policy): void {
     event.stopPropagation();
+    if (!this.canPublishPolicies()) {
+      this.toast.warn('No tienes permiso para publicar políticas');
+      return;
+    }
     this.api.publishPolicy(policy._id).subscribe({
       next: () => {
         this.toast.success('Política publicada', `${policy.name} ya está disponible para tramitar`);

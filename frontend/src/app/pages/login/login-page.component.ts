@@ -94,7 +94,8 @@ export class LoginPageComponent {
           fullName: response.full_name,
           subscriptionPlan: response.subscription_plan,
           department: response.department ?? null,
-          userId: response.user_id ?? null
+          userId: response.user_id ?? null,
+          permissions: response.permissions ?? []
         });
         this.toast.success(`Bienvenido, ${response.full_name}`, 'Sesión iniciada correctamente');
         this.router.navigateByUrl('/app');

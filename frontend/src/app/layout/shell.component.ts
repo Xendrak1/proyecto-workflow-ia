@@ -4,7 +4,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../core/api.service';
-import { Role, SessionService } from '../core/session.service';
+import { PermissionKey, Role, SessionService } from '../core/session.service';
 import { ToastService } from '../core/toast.service';
 import { IconComponent } from '../shared/icon.component';
 
@@ -14,6 +14,7 @@ interface NavItem {
   icon: string;
   roles: Role[];
   description: string;
+  permission: PermissionKey;
 }
 
 interface GuideContent {
@@ -45,51 +46,58 @@ export class ShellComponent {
       path: '/app/inbox',
       icon: 'inbox',
       roles: ['administrador', 'funcionario', 'supervisor'],
-      description: 'Tareas asignadas'
+      description: 'Tareas asignadas',
+      permission: 'nav.inbox'
     },
     {
       label: 'Trámites',
       path: '/app/tramites',
       icon: 'flow',
-      roles: ['administrador', 'funcionario', 'supervisor'],
-      description: 'Solicitudes en curso'
+      roles: ['administrador', 'funcionario', 'supervisor', 'cliente'],
+      description: 'Solicitudes en curso',
+      permission: 'nav.tramites'
     },
     {
       label: 'Diseñar políticas',
       path: '/app/policies',
       icon: 'workflow',
       roles: ['administrador', 'supervisor'],
-      description: 'Editor de procesos'
+      description: 'Editor de procesos',
+      permission: 'nav.policies'
     },
     {
       label: 'Analítica',
       path: '/app/analytics',
       icon: 'chart',
       roles: ['administrador', 'supervisor'],
-      description: 'Cuellos de botella'
+      description: 'Cuellos de botella',
+      permission: 'nav.analytics'
     },
     {
       label: 'Equipo',
       path: '/app/team',
       icon: 'users',
       roles: ['administrador'],
-      description: 'Usuarios y roles'
+      description: 'Usuarios y roles',
+      permission: 'nav.team'
     }
   ];
 
   readonly visibleNav = computed(() => {
     const role = this.session.role();
     if (!role) return [];
-    return this.nav.filter((item) => item.roles.includes(role));
+    return this.nav.filter((item) => item.roles.includes(role) && this.session.hasPermission(item.permission));
   });
 
   constructor() {
     void this.hydrateUser();
     this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
+        this.ensureLandingRoute(event.urlAfterRedirects);
         this.maybeOpenGuideForRoute(event.urlAfterRedirects);
       }
     });
+    this.ensureLandingRoute(this.router.url);
     this.maybeOpenGuideForRoute(this.router.url);
   }
 
@@ -105,7 +113,8 @@ export class ShellComponent {
         department: me.department ?? null,
         userId: me._id ?? null,
         fullName: me.full_name,
-        subscriptionPlan: me.subscription_plan ?? 'starter'
+        subscriptionPlan: me.subscription_plan ?? 'starter',
+        permissions: me.permissions ?? []
       });
     } catch {
       // ignore — keep using existing session info
@@ -182,6 +191,14 @@ export class ShellComponent {
     if (this.hasSeenGuide(url)) return;
     this.markGuideSeen(url);
     this.activeGuide.set(guide);
+  }
+
+  private ensureLandingRoute(url: string): void {
+    if (url !== '/app') return;
+    const first = this.visibleNav()[0];
+    if (first) {
+      this.router.navigateByUrl(first.path);
+    }
   }
 
   private handleRouteSpecificGuide(url: string, force: boolean): boolean {

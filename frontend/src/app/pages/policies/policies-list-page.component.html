@@ -8,7 +8,7 @@
         decisiones y rutas. Cuando la publiques, los trámites se enrutarán solos.
       </p>
     </div>
-    <button type="button" class="btn primary" (click)="toggleCreate()" data-tour="policies-actions" [class.tour-focus]="isTourFocus('policies-actions')">
+    <button *ngIf="canCreatePolicies()" type="button" class="btn primary" (click)="toggleCreate()" data-tour="policies-actions" [class.tour-focus]="isTourFocus('policies-actions')">
       <app-icon [name]="showCreate() ? 'x' : 'plus'" [size]="14" />
       <span>{{ showCreate() ? 'Cancelar' : 'Nueva política' }}</span>
     </button>
@@ -119,10 +119,11 @@
         <button type="button" class="btn sm" (click)="open(policy)">
           <app-icon name="edit" [size]="14" /> Diseñar
         </button>
-        <button type="button" class="btn sm" (click)="validate($event, policy)">
+        <button *ngIf="canValidatePolicies()" type="button" class="btn sm" (click)="validate($event, policy)">
           <app-icon name="check" [size]="14" /> Validar
         </button>
         <button
+          *ngIf="canPublishPolicies()"
           type="button"
           class="btn sm primary"
           (click)="publish($event, policy)"
@@ -141,7 +142,7 @@
       <span class="tiny">
         {{ search() ? 'Prueba con otro término o cambia el filtro.' : 'Comienza creando tu primera política de negocio.' }}
       </span>
-      <button *ngIf="!search()" type="button" class="btn primary sm" (click)="toggleCreate()">
+      <button *ngIf="!search() && canCreatePolicies()" type="button" class="btn primary sm" (click)="toggleCreate()">
         <app-icon name="plus" [size]="14" /> Crear política
       </button>
     </div>

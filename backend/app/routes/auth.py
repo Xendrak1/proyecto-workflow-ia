@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 
 from app.db.mongo import get_database
+from app.models.user import permissions_for_role
 from app.services.security import create_access_token, verify_password
 
 
@@ -30,4 +31,5 @@ async def login(payload: LoginRequest) -> dict:
         "subscription_plan": user.get("subscription_plan", "starter"),
         "user_id": str(user["_id"]),
         "department": user.get("department"),
+        "permissions": user.get("permissions") or permissions_for_role(user["role"]),
     }

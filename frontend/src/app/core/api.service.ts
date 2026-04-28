@@ -36,6 +36,10 @@ export class ApiService {
     return this.http.post<ApiResponse<User>>(`${this.baseUrl}/users`, payload);
   }
 
+  updateUser(userId: string, payload: Partial<User> & { password?: string | null }): Observable<ApiResponse<User>> {
+    return this.http.put<ApiResponse<User>>(`${this.baseUrl}/users/${userId}`, payload);
+  }
+
   updateUserPlan(userId: string, subscriptionPlan: string): Observable<ApiResponse<User>> {
     return this.http.put<ApiResponse<User>>(`${this.baseUrl}/users/${userId}/plan`, {
       subscription_plan: subscriptionPlan

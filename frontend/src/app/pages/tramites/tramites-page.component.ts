@@ -77,9 +77,7 @@ export class TramitesPageComponent implements OnDestroy {
     }
   ];
 
-  readonly canCreate = computed(
-    () => this.session.isAdmin() || this.session.isSupervisor() || this.session.isFuncionario() || this.session.isCliente()
-  );
+  readonly canCreate = computed(() => this.session.hasPermission('tramite.create'));
 
   readonly publishedPolicies = computed(() =>
     this.policies().filter((policy) => policy.status === 'publicada')

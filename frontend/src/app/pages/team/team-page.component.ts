@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
 import { User } from '../../core/api.models';
+import { PermissionKey, ROLE_DEFAULT_PERMISSIONS, Role } from '../../core/session.service';
 import { ToastService } from '../../core/toast.service';
 import { IconComponent } from '../../shared/icon.component';
 
@@ -39,9 +40,25 @@ export class TeamPageComponent implements OnDestroy {
   readonly searchTerm = signal('');
   readonly roleFilter = signal<RoleFilter>('todos');
   readonly showCreate = signal(false);
+  readonly editingUserId = signal<string | null>(null);
   readonly tourOpen = signal(false);
   readonly tourIndex = signal(0);
   readonly tourBubble = signal<TourBubblePosition>({ top: 120, left: 120 });
+  readonly permissionOptions: Array<{ key: PermissionKey; label: string; description: string }> = [
+    { key: 'nav.inbox', label: 'Ver bandeja', description: 'Permite entrar a la bandeja de tareas.' },
+    { key: 'nav.tramites', label: 'Ver trámites', description: 'Permite entrar al módulo de trámites.' },
+    { key: 'nav.policies', label: 'Ver políticas', description: 'Permite entrar al editor y listado de políticas.' },
+    { key: 'nav.analytics', label: 'Ver analítica', description: 'Permite consultar métricas y cuellos de botella.' },
+    { key: 'nav.team', label: 'Ver equipo', description: 'Permite entrar al panel de usuarios.' },
+    { key: 'tramite.create', label: 'Crear trámites', description: 'Permite iniciar solicitudes nuevas.' },
+    { key: 'task.edit', label: 'Editar tareas', description: 'Permite capturar datos y guardar avances en tareas.' },
+    { key: 'task.complete', label: 'Completar tareas', description: 'Permite cerrar y enrutar tareas.' },
+    { key: 'task.evidence', label: 'Subir evidencias', description: 'Permite adjuntar respaldos y archivos.' },
+    { key: 'policy.create', label: 'Crear políticas', description: 'Permite crear nuevas políticas.' },
+    { key: 'policy.validate', label: 'Validar políticas', description: 'Permite ejecutar validación del flujo.' },
+    { key: 'policy.publish', label: 'Publicar políticas', description: 'Permite publicar políticas operativas.' },
+    { key: 'user.manage', label: 'Gestionar usuarios', description: 'Permite editar usuarios, planes y permisos.' }
+  ];
 
   private resizeHandler: (() => void) | null = null;
   private readonly tourSteps: PageTourStep[] = [
@@ -103,6 +120,15 @@ export class TeamPageComponent implements OnDestroy {
     role: ['funcionario', Validators.required],
     department: [''],
     subscription_plan: ['starter']
+  });
+  readonly editForm = this.fb.group({
+    full_name: ['', Validators.required],
+    email: ['', [Validators.required, Validators.email]],
+    password: [''],
+    role: ['funcionario', Validators.required],
+    department: [''],
+    subscription_plan: ['starter'],
+    status: ['activo']
   });
 
   constructor() {
@@ -171,6 +197,58 @@ export class TeamPageComponent implements OnDestroy {
       });
   }
 
+  startEdit(user: User): void {
+    this.editingUserId.set(user._id ?? null);
+    this.editForm.reset({
+      full_name: user.full_name,
+      email: user.email,
+      password: '',
+      role: user.role,
+      department: user.department ?? '',
+      subscription_plan: user.subscription_plan ?? 'starter',
+      status: user.status ?? 'activo'
+    });
+  }
+
+  cancelEdit(): void {
+    this.editingUserId.set(null);
+    this.editForm.reset({
+      full_name: '',
+      email: '',
+      password: '',
+      role: 'funcionario',
+      department: '',
+      subscription_plan: 'starter',
+      status: 'activo'
+    });
+  }
+
+  saveEdit(user: User): void {
+    if (!user._id) return;
+    if (this.editForm.invalid) {
+      this.editForm.markAllAsTouched();
+      return;
+    }
+    const raw = this.editForm.getRawValue();
+    this.api.updateUser(user._id, {
+      full_name: raw.full_name as string,
+      email: raw.email as string,
+      password: (raw.password as string)?.trim() || null,
+      role: raw.role as string,
+      department: (raw.department as string) || null,
+      subscription_plan: raw.subscription_plan as string,
+      status: raw.status as string,
+      permissions: this.permissionsForUser(user)
+    }).subscribe({
+      next: () => {
+        this.toast.success('Usuario actualizado', `${raw.full_name} quedó guardado con sus nuevos accesos.`);
+        this.cancelEdit();
+        this.refresh();
+      },
+      error: () => this.toast.error('No se pudo actualizar el usuario')
+    });
+  }
+
   changePlan(user: User, plan: string): void {
     if (!user._id) return;
     this.api.updateUserPlan(user._id, plan).subscribe({
@@ -209,6 +287,29 @@ export class TeamPageComponent implements OnDestroy {
       enterprise: 'violet'
     };
     return map[plan] ?? 'neutral';
+  }
+
+  permissionCount(user: User): number {
+    return this.permissionsForUser(user).length;
+  }
+
+  permissionsForUser(user: User): PermissionKey[] {
+    const role = (user.role as Role) ?? 'funcionario';
+    return (user.permissions?.length ? user.permissions : ROLE_DEFAULT_PERMISSIONS[role] ?? []) as PermissionKey[];
+  }
+
+  hasPermission(user: User, permission: PermissionKey): boolean {
+    return this.permissionsForUser(user).includes(permission);
+  }
+
+  togglePermission(user: User, permission: PermissionKey): void {
+    const current = this.permissionsForUser(user);
+    const next = current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission];
+    user.permissions = next;
+  }
+
+  applyRoleDefaults(user: User): void {
+    user.permissions = [...(ROLE_DEFAULT_PERMISSIONS[(user.role as Role) ?? 'funcionario'] ?? [])];
   }
 
   currentTourStep(): PageTourStep {
