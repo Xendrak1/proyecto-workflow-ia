@@ -138,6 +138,9 @@ export class ShellComponent {
   }
 
   openCurrentGuide(force = false): void {
+    if (this.handleRouteSpecificGuide(this.router.url, force)) {
+      return;
+    }
     const guide = this.guideForUrl(this.router.url);
     if (!guide) return;
     if (force) {
@@ -171,11 +174,30 @@ export class ShellComponent {
   }
 
   private maybeOpenGuideForRoute(url: string): void {
+    if (this.handleRouteSpecificGuide(url, false)) {
+      return;
+    }
     const guide = this.guideForUrl(url);
     if (!guide) return;
     if (this.hasSeenGuide(url)) return;
     this.markGuideSeen(url);
     this.activeGuide.set(guide);
+  }
+
+  private handleRouteSpecificGuide(url: string, force: boolean): boolean {
+    if (typeof window === 'undefined') return false;
+    if (!url.includes('/app/inbox')) return false;
+    if (!force && this.hasSeenGuide(url)) return true;
+    this.markGuideSeen(url);
+    window.dispatchEvent(
+      new CustomEvent('workflow-ia:start-tour', {
+        detail: {
+          route: 'inbox',
+          force
+        }
+      })
+    );
+    return true;
   }
 
   private guideForUrl(url: string): GuideContent | null {

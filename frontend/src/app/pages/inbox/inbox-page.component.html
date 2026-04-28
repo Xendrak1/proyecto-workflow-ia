@@ -8,7 +8,7 @@
         sola cada 12 segundos.
       </p>
     </div>
-    <div class="head-actions">
+    <div class="head-actions" data-tour="head-actions" [class.tour-focus]="isTourFocus('head-actions')">
       <div class="segmented">
         <button
           type="button"
@@ -36,7 +36,7 @@
     </div>
   </header>
 
-  <div class="meter-row">
+  <div class="meter-row" data-tour="meters" [class.tour-focus]="isTourFocus('meters')">
     <article class="meter">
       <span>Pendientes</span>
       <strong>{{ stats().pendientes }}</strong>
@@ -93,7 +93,7 @@
   </div>
 
   <div class="kanban">
-    <section class="kcol pendiente">
+    <section class="kcol pendiente" data-tour="pending-column" [class.tour-focus]="isTourFocus('pending-column')">
       <header>
         <span class="dot"></span>
         <h3>Pendientes</h3>
@@ -111,7 +111,7 @@
               <span class="badge neutral">{{ task.assigned_department || 'Sin área' }}</span>
               <span class="badge neutral">{{ task.assigned_role || '—' }}</span>
             </div>
-            <div class="card-actions">
+            <div class="card-actions" data-tour="pending-card-actions" [class.tour-focus]="isTourFocus('pending-card-actions')">
               <button type="button" class="btn sm" (click)="openTask(task)">
                 <app-icon name="edit" [size]="14" /> Atender
               </button>
@@ -199,7 +199,7 @@
       </div>
     </section>
 
-    <section class="kcol completada">
+    <section class="kcol completada" data-tour="completed-column" [class.tour-focus]="isTourFocus('completed-column')">
       <header>
         <span class="dot"></span>
         <h3>Completadas</h3>
@@ -225,4 +225,30 @@
       </div>
     </section>
   </div>
+
+  <div class="tour-backdrop" *ngIf="tourOpen()" (click)="closeTour()"></div>
+  <section
+    class="tour-card"
+    *ngIf="tourOpen()"
+    [style.top.px]="tourBubble().top"
+    [style.left.px]="tourBubble().left"
+    (click)="$event.stopPropagation()"
+  >
+    <header>
+      <span class="badge primary dot">Paso {{ tourIndex() + 1 }} de 5</span>
+      <button type="button" class="tour-close" (click)="closeTour()" aria-label="Cerrar recorrido">
+        <app-icon name="close" [size]="14" />
+      </button>
+    </header>
+    <h3>{{ currentTourStep().title }}</h3>
+    <p>{{ currentTourStep().body }}</p>
+    <footer>
+      <button type="button" class="btn ghost sm" (click)="previousTourStep()" [disabled]="tourIndex() === 0">
+        Anterior
+      </button>
+      <button type="button" class="btn primary sm" (click)="nextTourStep()">
+        {{ tourIndex() === 4 ? 'Finalizar' : 'Siguiente' }}
+      </button>
+    </footer>
+  </section>
 </section>

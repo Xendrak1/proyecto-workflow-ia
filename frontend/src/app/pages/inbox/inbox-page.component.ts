@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
@@ -10,6 +10,18 @@ import { IconComponent } from '../../shared/icon.component';
 
 type FilterMode = 'mine' | 'department' | 'all';
 type StatusFilter = 'all' | 'pendiente' | 'en_proceso' | 'observada' | 'completada';
+type TourTarget = 'head-actions' | 'meters' | 'pending-column' | 'completed-column' | 'pending-card-actions';
+
+interface InboxTourStep {
+  target: TourTarget;
+  title: string;
+  body: string;
+}
+
+interface TourBubblePosition {
+  top: number;
+  left: number;
+}
 
 @Component({
   selector: 'app-inbox-page',
@@ -22,6 +34,7 @@ export class InboxPageComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly zone = inject(NgZone);
   readonly session = inject(SessionService);
 
   readonly tasks = signal<Task[]>([]);
@@ -30,8 +43,40 @@ export class InboxPageComponent implements OnDestroy {
   readonly statusFilter = signal<StatusFilter>('all');
   readonly autoRefresh = signal(true);
   readonly lastRefreshed = signal<Date | null>(null);
+  readonly tourOpen = signal(false);
+  readonly tourIndex = signal(0);
+  readonly tourTarget = signal<TourTarget>('head-actions');
+  readonly tourBubble = signal<TourBubblePosition>({ top: 120, left: 120 });
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
+  private resizeHandler: (() => void) | null = null;
+  private readonly tourSteps: InboxTourStep[] = [
+    {
+      target: 'head-actions',
+      title: 'Filtros y refresco',
+      body: 'Aquí cambias entre tareas de tu área, tuyas o todas, pausas el auto-refresh y actualizas manualmente la bandeja.'
+    },
+    {
+      target: 'meters',
+      title: 'Resumen operativo',
+      body: 'Estos bloques te dicen cuántas tareas tienes en cada estado. Puedes usar sus botones para saltar directo al primer caso pendiente de esa categoría.'
+    },
+    {
+      target: 'pending-column',
+      title: 'Columna de pendientes',
+      body: 'Aquí aterrizan las tareas urgentes. Esta es la columna que más vas a vigilar durante la operación diaria.'
+    },
+    {
+      target: 'pending-card-actions',
+      title: 'Acciones rápidas',
+      body: 'Dentro de cada tarjeta puedes entrar a atenderla o completarla al instante si ya tienes toda la información necesaria.'
+    },
+    {
+      target: 'completed-column',
+      title: 'Historial cerrado',
+      body: 'Las completadas te dejan revisar trazabilidad, confirmar cierres y mostrar evidencia de que el flujo sí está operando.'
+    }
+  ];
 
   readonly filtered = computed(() => {
     const mode = this.filter();
@@ -75,10 +120,12 @@ export class InboxPageComponent implements OnDestroy {
   constructor() {
     this.refresh();
     this.startPolling();
+    this.bindTourListeners();
   }
 
   ngOnDestroy(): void {
     this.stopPolling();
+    this.unbindTourListeners();
   }
 
   refresh(): void {
@@ -151,6 +198,33 @@ export class InboxPageComponent implements OnDestroy {
     return ts.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
+  currentTourStep(): InboxTourStep {
+    return this.tourSteps[this.tourIndex()] ?? this.tourSteps[0];
+  }
+
+  isTourFocus(target: TourTarget): boolean {
+    return this.tourOpen() && this.currentTourStep().target === target;
+  }
+
+  nextTourStep(): void {
+    if (this.tourIndex() >= this.tourSteps.length - 1) {
+      this.closeTour();
+      return;
+    }
+    this.tourIndex.update((value) => value + 1);
+    this.syncTourPosition();
+  }
+
+  previousTourStep(): void {
+    if (this.tourIndex() <= 0) return;
+    this.tourIndex.update((value) => value - 1);
+    this.syncTourPosition();
+  }
+
+  closeTour(): void {
+    this.tourOpen.set(false);
+  }
+
   private startPolling(): void {
     this.stopPolling();
     if (!this.autoRefresh()) return;
@@ -169,5 +243,61 @@ export class InboxPageComponent implements OnDestroy {
       clearInterval(this.pollHandle);
       this.pollHandle = null;
     }
+  }
+
+  private bindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      this.zone.run(() => this.syncTourPosition());
+    };
+    this.resizeHandler = handler;
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private unbindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      window.removeEventListener('scroll', this.resizeHandler, true);
+    }
+    window.removeEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private readonly handleTourRequest = (event: CustomEvent<{ route?: string; force?: boolean }>) => {
+    if (event.detail?.route !== 'inbox') return;
+    this.startTour();
+  };
+
+  private startTour(): void {
+    this.tourIndex.set(0);
+    this.tourOpen.set(true);
+    setTimeout(() => this.syncTourPosition(), 0);
+  }
+
+  private syncTourPosition(): void {
+    if (!this.tourOpen() || typeof document === 'undefined' || typeof window === 'undefined') return;
+    const target = this.currentTourStep().target;
+    this.tourTarget.set(target);
+    const element = document.querySelector<HTMLElement>(`[data-tour="${target}"]`);
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const bubbleWidth = 360;
+    const spacing = 18;
+    let left = rect.left;
+    let top = rect.bottom + spacing;
+
+    if (left + bubbleWidth > window.innerWidth - 24) {
+      left = Math.max(16, window.innerWidth - bubbleWidth - 24);
+    }
+    if (top + 240 > window.innerHeight - 16) {
+      top = Math.max(16, rect.top - 240 - spacing);
+    }
+
+    this.tourBubble.set({
+      left,
+      top
+    });
   }
 }
