@@ -316,6 +316,19 @@
   justify-content: flex-end;
 }
 
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+}
+
 .page-wrap {
   padding: 24px 28px 36px;
   min-height: calc(100vh - var(--topbar-h));
@@ -323,6 +336,67 @@
 
 .desktop-only {
   display: inline-flex;
+}
+
+.guide-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.58);
+  display: grid;
+  place-items: center;
+  z-index: 70;
+  padding: 20px;
+}
+
+.guide-modal {
+  width: min(560px, 100%);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-xl);
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.guide-modal header,
+.guide-modal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.guide-modal h3 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--ink-1);
+}
+
+.guide-modal p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.guide-modal ol {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+  color: var(--ink-1);
+}
+
+.guide-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2, var(--bg-surface));
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 @media (max-width: 1024px) {

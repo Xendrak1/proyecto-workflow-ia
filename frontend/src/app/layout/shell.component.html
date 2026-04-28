@@ -66,6 +66,10 @@
         </div>
       </div>
       <div class="topbar-right">
+        <button type="button" class="help-btn" (click)="openCurrentGuide(true)" title="Mostrar guía de esta sección">
+          <app-icon name="sparkles" [size]="14" />
+          <span>Guía</span>
+        </button>
         <span class="badge primary dot" *ngIf="session.department() as dept">{{ dept }}</span>
         <span class="badge neutral dot">{{ session.email() }}</span>
       </div>
@@ -77,4 +81,23 @@
   </div>
 
   <div class="scrim" (click)="closeMobileNav()"></div>
+
+  <div class="guide-backdrop" *ngIf="activeGuide() as guide" (click)="closeGuide()">
+    <section class="guide-modal" (click)="$event.stopPropagation()">
+      <header>
+        <span class="badge primary dot">Primer recorrido</span>
+        <button type="button" class="guide-close" (click)="closeGuide()" aria-label="Cerrar guía">
+          <app-icon name="close" [size]="14" />
+        </button>
+      </header>
+      <h3>{{ guide.title }}</h3>
+      <p>{{ guide.summary }}</p>
+      <ol>
+        <li *ngFor="let step of guide.steps">{{ step }}</li>
+      </ol>
+      <footer>
+        <button type="button" class="btn ghost sm" (click)="closeGuide()">Entendido</button>
+      </footer>
+    </section>
+  </div>
 </div>
