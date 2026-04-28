@@ -5,7 +5,7 @@
       <h1>Trámites</h1>
       <p class="muted">Solicitudes activas y completadas. Cada trámite genera tareas en cada nodo de la política.</p>
     </div>
-    <div class="head-actions" *ngIf="canCreate()">
+    <div class="head-actions" *ngIf="canCreate()" data-tour="tramites-actions" [class.tour-focus]="isTourFocus('tramites-actions')">
       <button type="button" class="btn primary" (click)="toggleCreate()">
         <app-icon name="plus" [size]="14" />
         {{ showCreate() ? 'Cancelar' : 'Iniciar trámite' }}
@@ -13,7 +13,7 @@
     </div>
   </header>
 
-  <section class="create-card card card-pad" *ngIf="showCreate()">
+  <section class="create-card card card-pad" *ngIf="showCreate()" data-tour="tramites-create" [class.tour-focus]="isTourFocus('tramites-create')">
     <header class="block-head">
       <span class="eyebrow">Nuevo trámite</span>
       <h3>Datos del solicitante</h3>
@@ -49,7 +49,7 @@
     </form>
   </section>
 
-  <section class="meter-row">
+  <section class="meter-row" data-tour="tramites-meters" [class.tour-focus]="isTourFocus('tramites-meters')">
     <article class="meter">
       <span>Total</span>
       <strong>{{ stats().total }}</strong>
@@ -68,7 +68,7 @@
     </article>
   </section>
 
-  <section class="filter-bar">
+  <section class="filter-bar" data-tour="tramites-filters" [class.tour-focus]="isTourFocus('tramites-filters')">
     <div class="search">
       <app-icon name="search" [size]="14" />
       <input
@@ -97,7 +97,7 @@
     </button>
   </section>
 
-  <section class="card list-card" *ngIf="filtered().length; else emptyTpl">
+  <section class="card list-card" *ngIf="filtered().length; else emptyTpl" data-tour="tramites-list" [class.tour-focus]="isTourFocus('tramites-list')">
     <table class="dt">
       <thead>
         <tr>
@@ -147,4 +147,30 @@
       </span>
     </div>
   </ng-template>
+
+  <div class="tour-backdrop" *ngIf="tourOpen()" (click)="closeTour()"></div>
+  <section
+    class="tour-card"
+    *ngIf="tourOpen()"
+    [style.top.px]="tourBubble().top"
+    [style.left.px]="tourBubble().left"
+    (click)="$event.stopPropagation()"
+  >
+    <header>
+      <span class="badge primary dot">Paso {{ tourIndex() + 1 }} de 5</span>
+      <button type="button" class="tour-close" (click)="closeTour()" aria-label="Cerrar recorrido">
+        <app-icon name="close" [size]="14" />
+      </button>
+    </header>
+    <h3>{{ currentTourStep().title }}</h3>
+    <p>{{ currentTourStep().body }}</p>
+    <footer>
+      <button type="button" class="btn ghost sm" (click)="previousTourStep()" [disabled]="tourIndex() === 0">
+        Anterior
+      </button>
+      <button type="button" class="btn primary sm" (click)="nextTourStep()">
+        {{ tourIndex() === 4 ? 'Finalizar' : 'Siguiente' }}
+      </button>
+    </footer>
+  </section>
 </section>

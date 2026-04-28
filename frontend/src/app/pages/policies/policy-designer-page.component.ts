@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, HostListener, Input, NgZone, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -12,6 +12,7 @@ import { IconComponent } from '../../shared/icon.component';
 
 type PanelKey = 'inspector' | 'add-node' | 'add-route' | 'fields' | 'ai';
 type AIStrategy = 'merge' | 'adapt' | 'replace';
+type TourTarget = 'designer-head' | 'designer-banner' | 'designer-meters' | 'designer-canvas' | 'designer-rail';
 
 interface DiagramNodeView {
   code: string;
@@ -57,6 +58,17 @@ interface PanelGuide {
   description: string;
 }
 
+interface PageTourStep {
+  target: TourTarget;
+  title: string;
+  body: string;
+}
+
+interface TourBubblePosition {
+  top: number;
+  left: number;
+}
+
 @Component({
   selector: 'app-policy-designer-page',
   standalone: true,
@@ -75,6 +87,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly zone = inject(NgZone);
 
   readonly policy = signal<Policy | null>(null);
   readonly loading = signal(true);
@@ -103,6 +116,38 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   readonly creatingLane = signal(false);
   readonly newLaneName = signal('');
   readonly laneListCollapsed = signal(false);
+  readonly tourOpen = signal(false);
+  readonly tourIndex = signal(0);
+  readonly tourBubble = signal<TourBubblePosition>({ top: 120, left: 120 });
+
+  private resizeTourHandler: (() => void) | null = null;
+  private readonly tourSteps: PageTourStep[] = [
+    {
+      target: 'designer-head',
+      title: 'Estado y publicación',
+      body: 'Aquí ves si la política sigue en borrador, la validas y la publicas cuando el flujo ya está listo para operar.'
+    },
+    {
+      target: 'designer-banner',
+      title: 'Ruta de trabajo',
+      body: 'Este bloque resume el orden natural: agregar nodos, conectarlos, definir campos y luego validar o publicar.'
+    },
+    {
+      target: 'designer-meters',
+      title: 'Resumen del diagrama',
+      body: 'Estas métricas te dicen cuántos nodos, decisiones, transiciones y calles tiene el proceso actual.'
+    },
+    {
+      target: 'designer-canvas',
+      title: 'Canvas visual',
+      body: 'Aquí vive el diagrama. Puedes mover nodos, reorganizar el flujo y revisar cómo se conectan las calles.'
+    },
+    {
+      target: 'designer-rail',
+      title: 'Panel de edición',
+      body: 'En este panel cambias entre Inspector, Nodo, Ruta, Campos e IA para editar el flujo paso a paso.'
+    }
+  ];
 
   readonly nodeForm = this.fb.group({
     code: ['', Validators.required],
@@ -295,6 +340,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     }
     if (this.policyId) this.loadPolicy(this.policyId);
     this.startCollaborationRefresh();
+    this.bindTourListeners();
   }
 
   ngAfterViewInit(): void {
@@ -313,6 +359,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     }
     this.laneControlsObserver?.disconnect();
     this.laneControlsObserver = null;
+    this.unbindTourListeners();
   }
 
   private detectVoiceSupport(): boolean {
@@ -392,6 +439,9 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
 
   setPanel(panel: PanelKey): void {
     this.panel.set(panel);
+    if (this.tourOpen()) {
+      setTimeout(() => this.syncTourPosition(), 0);
+    }
   }
 
   setAiStrategy(strategy: AIStrategy): void {
@@ -1466,5 +1516,84 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       .join('\n');
 
     return `Calles: ${lanes.join(', ')}\nNodos:\n${nodes}\nTransiciones:\n${transitions}`;
+  }
+
+  currentTourStep(): PageTourStep {
+    return this.tourSteps[this.tourIndex()] ?? this.tourSteps[0];
+  }
+
+  isTourFocus(target: TourTarget): boolean {
+    return this.tourOpen() && this.currentTourStep().target === target;
+  }
+
+  nextTourStep(): void {
+    if (this.tourIndex() >= this.tourSteps.length - 1) {
+      this.closeTour();
+      return;
+    }
+    const nextIndex = this.tourIndex() + 1;
+    this.tourIndex.set(nextIndex);
+    if (this.tourSteps[nextIndex].target === 'designer-rail') {
+      this.panel.set('ai');
+    }
+    this.syncTourPosition();
+  }
+
+  previousTourStep(): void {
+    if (this.tourIndex() <= 0) return;
+    this.tourIndex.update((value) => value - 1);
+    this.syncTourPosition();
+  }
+
+  closeTour(): void {
+    this.tourOpen.set(false);
+  }
+
+  private bindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    const handler = () => this.zone.run(() => this.syncTourPosition());
+    this.resizeTourHandler = handler;
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private unbindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    if (this.resizeTourHandler) {
+      window.removeEventListener('resize', this.resizeTourHandler);
+      window.removeEventListener('scroll', this.resizeTourHandler, true);
+    }
+    window.removeEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private readonly handleTourRequest = (event: CustomEvent<{ route?: string }>) => {
+    if (event.detail?.route !== 'policy-designer') return;
+    this.startTour();
+  };
+
+  private startTour(): void {
+    this.panel.set('ai');
+    this.tourIndex.set(0);
+    this.tourOpen.set(true);
+    setTimeout(() => this.syncTourPosition(), 0);
+  }
+
+  private syncTourPosition(): void {
+    if (!this.tourOpen() || typeof document === 'undefined' || typeof window === 'undefined') return;
+    const element = document.querySelector<HTMLElement>(`[data-tour="${this.currentTourStep().target}"]`);
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const bubbleWidth = 360;
+    const spacing = 18;
+    let left = rect.left;
+    let top = rect.bottom + spacing;
+    if (left + bubbleWidth > window.innerWidth - 24) {
+      left = Math.max(16, window.innerWidth - bubbleWidth - 24);
+    }
+    if (top + 240 > window.innerHeight - 16) {
+      top = Math.max(16, rect.top - 240 - spacing);
+    }
+    this.tourBubble.set({ top, left });
   }
 }

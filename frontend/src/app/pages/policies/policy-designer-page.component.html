@@ -1,5 +1,5 @@
 <section class="page" *ngIf="policy() as currentPolicy; else loadingTpl">
-  <header class="page-head">
+  <header class="page-head" data-tour="designer-head" [class.tour-focus]="isTourFocus('designer-head')">
     <div class="head-left">
       <button type="button" class="btn ghost sm" (click)="back()">
         <app-icon name="arrowLeft" [size]="14" /> Políticas
@@ -28,7 +28,7 @@
     </div>
   </header>
 
-  <aside class="help-banner">
+  <aside class="help-banner" data-tour="designer-banner" [class.tour-focus]="isTourFocus('designer-banner')">
     <div class="help-icon"><app-icon name="sparkles" [size]="16" /></div>
     <div class="help-body">
       <strong>¿Cómo se diseña una política?</strong>
@@ -43,7 +43,7 @@
     </button>
   </aside>
 
-  <div class="meter-row">
+  <div class="meter-row" data-tour="designer-meters" [class.tour-focus]="isTourFocus('designer-meters')">
     <article class="meter">
       <span>Nodos</span>
       <strong>{{ stats().total }}</strong>
@@ -67,7 +67,7 @@
   </div>
 
   <section class="studio">
-    <article class="canvas-card">
+    <article class="canvas-card" data-tour="designer-canvas" [class.tour-focus]="isTourFocus('designer-canvas')">
       <div class="canvas-toolbar">
         <div class="tools">
           <button type="button" class="tool" (click)="quickAdd('inicio')">
@@ -250,7 +250,7 @@
       </ng-template>
     </article>
 
-    <aside class="rail">
+    <aside class="rail" data-tour="designer-rail" [class.tour-focus]="isTourFocus('designer-rail')">
       <nav class="rail-tabs">
         <button type="button" [class.active]="panel() === 'inspector'" (click)="setPanel('inspector')">
           <app-icon name="target" [size]="14" /> Inspector
@@ -632,6 +632,32 @@
         </section>
       </section>
     </aside>
+  </section>
+
+  <div class="tour-backdrop" *ngIf="tourOpen()" (click)="closeTour()"></div>
+  <section
+    class="tour-card"
+    *ngIf="tourOpen()"
+    [style.top.px]="tourBubble().top"
+    [style.left.px]="tourBubble().left"
+    (click)="$event.stopPropagation()"
+  >
+    <header>
+      <span class="badge primary dot">Paso {{ tourIndex() + 1 }} de 5</span>
+      <button type="button" class="tour-close" (click)="closeTour()" aria-label="Cerrar recorrido">
+        <app-icon name="close" [size]="14" />
+      </button>
+    </header>
+    <h3>{{ currentTourStep().title }}</h3>
+    <p>{{ currentTourStep().body }}</p>
+    <footer>
+      <button type="button" class="btn ghost sm" (click)="previousTourStep()" [disabled]="tourIndex() === 0">
+        Anterior
+      </button>
+      <button type="button" class="btn primary sm" (click)="nextTourStep()">
+        {{ tourIndex() === 4 ? 'Finalizar' : 'Siguiente' }}
+      </button>
+    </footer>
   </section>
 </section>
 

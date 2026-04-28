@@ -5,7 +5,7 @@
       <h1>Analítica del negocio</h1>
       <p class="muted">Detecta cuellos de botella, mide carga por departamento y monitorea la salud del sistema.</p>
     </div>
-    <div class="head-actions">
+    <div class="head-actions" data-tour="analytics-actions" [class.tour-focus]="isTourFocus('analytics-actions')">
       <button type="button" class="btn ghost sm" (click)="refresh()">
         <app-icon name="refresh" [size]="14" /> Actualizar
       </button>
@@ -18,7 +18,7 @@
     </div>
   </header>
 
-  <section class="kpi-grid">
+  <section class="kpi-grid" data-tour="analytics-kpi" [class.tour-focus]="isTourFocus('analytics-kpi')">
     <article class="kpi card card-pad">
       <div class="kpi-icon" data-tone="primary"><app-icon name="flow" [size]="18" /></div>
       <div>
@@ -53,7 +53,7 @@
     </article>
   </section>
 
-  <section class="content-grid">
+  <section class="content-grid" data-tour="analytics-load" [class.tour-focus]="isTourFocus('analytics-load')">
     <article class="card card-pad">
       <header class="block-head spread">
         <div>
@@ -128,7 +128,7 @@
     </article>
   </section>
 
-  <section class="card card-pad" style="margin-top: 16px">
+  <section class="card card-pad" style="margin-top: 16px" data-tour="analytics-bottlenecks" [class.tour-focus]="isTourFocus('analytics-bottlenecks')">
     <header class="block-head spread">
       <div>
         <span class="eyebrow">Detección automática</span>
@@ -182,5 +182,31 @@
         <li *ngFor="let rec of bottleneckData()?.recommendations ?? []">{{ rec }}</li>
       </ul>
     </div>
+  </section>
+
+  <div class="tour-backdrop" *ngIf="tourOpen()" (click)="closeTour()"></div>
+  <section
+    class="tour-card"
+    *ngIf="tourOpen()"
+    [style.top.px]="tourBubble().top"
+    [style.left.px]="tourBubble().left"
+    (click)="$event.stopPropagation()"
+  >
+    <header>
+      <span class="badge primary dot">Paso {{ tourIndex() + 1 }} de 4</span>
+      <button type="button" class="tour-close" (click)="closeTour()" aria-label="Cerrar recorrido">
+        <app-icon name="close" [size]="14" />
+      </button>
+    </header>
+    <h3>{{ currentTourStep().title }}</h3>
+    <p>{{ currentTourStep().body }}</p>
+    <footer>
+      <button type="button" class="btn ghost sm" (click)="previousTourStep()" [disabled]="tourIndex() === 0">
+        Anterior
+      </button>
+      <button type="button" class="btn primary sm" (click)="nextTourStep()">
+        {{ tourIndex() === 3 ? 'Finalizar' : 'Siguiente' }}
+      </button>
+    </footer>
   </section>
 </section>

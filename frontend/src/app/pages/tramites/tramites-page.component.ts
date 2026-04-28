@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -10,6 +10,18 @@ import { ToastService } from '../../core/toast.service';
 import { IconComponent } from '../../shared/icon.component';
 
 type StatusFilter = 'todos' | 'en_proceso' | 'completado' | 'observado';
+type TourTarget = 'tramites-actions' | 'tramites-create' | 'tramites-meters' | 'tramites-filters' | 'tramites-list';
+
+interface PageTourStep {
+  target: TourTarget;
+  title: string;
+  body: string;
+}
+
+interface TourBubblePosition {
+  top: number;
+  left: number;
+}
 
 @Component({
   selector: 'app-tramites-page',
@@ -18,11 +30,12 @@ type StatusFilter = 'todos' | 'en_proceso' | 'completado' | 'observado';
   templateUrl: './tramites-page.component.html',
   styleUrl: './tramites-page.component.scss'
 })
-export class TramitesPageComponent {
+export class TramitesPageComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly fb = inject(FormBuilder);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly zone = inject(NgZone);
   readonly session = inject(SessionService);
 
   readonly tramites = signal<Tramite[]>([]);
@@ -31,6 +44,38 @@ export class TramitesPageComponent {
   readonly showCreate = signal(false);
   readonly searchTerm = signal('');
   readonly statusFilter = signal<StatusFilter>('todos');
+  readonly tourOpen = signal(false);
+  readonly tourIndex = signal(0);
+  readonly tourBubble = signal<TourBubblePosition>({ top: 120, left: 120 });
+
+  private resizeHandler: (() => void) | null = null;
+  private readonly tourSteps: PageTourStep[] = [
+    {
+      target: 'tramites-actions',
+      title: 'Crear nuevos trámites',
+      body: 'Desde aquí inicias solicitudes nuevas. El sistema usará la política publicada para generar tareas automáticamente.'
+    },
+    {
+      target: 'tramites-create',
+      title: 'Formulario de arranque',
+      body: 'Cuando abras este panel, defines al solicitante y el tipo de trámite. Eso dispara el flujo completo.'
+    },
+    {
+      target: 'tramites-meters',
+      title: 'Estado general',
+      body: 'Estas métricas te dejan ver rápido cuántos trámites están en curso, completados o con observaciones.'
+    },
+    {
+      target: 'tramites-filters',
+      title: 'Búsqueda y filtros',
+      body: 'Aquí filtras por texto y por estado para ubicar un caso concreto sin recorrer toda la tabla.'
+    },
+    {
+      target: 'tramites-list',
+      title: 'Listado trazable',
+      body: 'Cada fila muestra quién solicitó el trámite, qué política está corriendo y en qué nodo va. Desde aquí entras al detalle.'
+    }
+  ];
 
   readonly canCreate = computed(
     () => this.session.isAdmin() || this.session.isSupervisor() || this.session.isFuncionario() || this.session.isCliente()
@@ -77,6 +122,11 @@ export class TramitesPageComponent {
 
   constructor() {
     this.refresh();
+    this.bindTourListeners();
+  }
+
+  ngOnDestroy(): void {
+    this.unbindTourListeners();
   }
 
   refresh(): void {
@@ -107,6 +157,9 @@ export class TramitesPageComponent {
 
   toggleCreate(): void {
     this.showCreate.update((open) => !open);
+    if (this.tourOpen()) {
+      setTimeout(() => this.syncTourPosition(), 0);
+    }
   }
 
   submit(): void {
@@ -155,5 +208,88 @@ export class TramitesPageComponent {
     if (!value) return '—';
     const date = new Date(value);
     return date.toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  currentTourStep(): PageTourStep {
+    return this.tourSteps[this.tourIndex()] ?? this.tourSteps[0];
+  }
+
+  isTourFocus(target: TourTarget): boolean {
+    return this.tourOpen() && this.currentTourStep().target === target;
+  }
+
+  nextTourStep(): void {
+    if (this.tourIndex() >= this.tourSteps.length - 1) {
+      this.closeTour();
+      return;
+    }
+    const nextIndex = this.tourIndex() + 1;
+    this.tourIndex.set(nextIndex);
+    if (this.tourSteps[nextIndex].target === 'tramites-create' && !this.showCreate()) {
+      this.showCreate.set(true);
+    }
+    this.syncTourPosition();
+  }
+
+  previousTourStep(): void {
+    if (this.tourIndex() <= 0) return;
+    this.tourIndex.update((value) => value - 1);
+    this.syncTourPosition();
+  }
+
+  closeTour(): void {
+    this.tourOpen.set(false);
+  }
+
+  private bindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    const handler = () => this.zone.run(() => this.syncTourPosition());
+    this.resizeHandler = handler;
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private unbindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      window.removeEventListener('scroll', this.resizeHandler, true);
+    }
+    window.removeEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private readonly handleTourRequest = (event: CustomEvent<{ route?: string }>) => {
+    if (event.detail?.route !== 'tramites') return;
+    this.startTour();
+  };
+
+  private startTour(): void {
+    if (!this.showCreate()) {
+      this.showCreate.set(true);
+    }
+    this.tourIndex.set(0);
+    this.tourOpen.set(true);
+    setTimeout(() => this.syncTourPosition(), 0);
+  }
+
+  private syncTourPosition(): void {
+    if (!this.tourOpen() || typeof document === 'undefined' || typeof window === 'undefined') return;
+    const element = document.querySelector<HTMLElement>(`[data-tour="${this.currentTourStep().target}"]`);
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const bubbleWidth = 360;
+    const spacing = 18;
+    let left = rect.left;
+    let top = rect.bottom + spacing;
+
+    if (left + bubbleWidth > window.innerWidth - 24) {
+      left = Math.max(16, window.innerWidth - bubbleWidth - 24);
+    }
+    if (top + 240 > window.innerHeight - 16) {
+      top = Math.max(16, rect.top - 240 - spacing);
+    }
+
+    this.tourBubble.set({ top, left });
   }
 }

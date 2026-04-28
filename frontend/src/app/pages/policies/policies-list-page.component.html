@@ -8,13 +8,13 @@
         decisiones y rutas. Cuando la publiques, los trámites se enrutarán solos.
       </p>
     </div>
-    <button type="button" class="btn primary" (click)="toggleCreate()">
+    <button type="button" class="btn primary" (click)="toggleCreate()" data-tour="policies-actions" [class.tour-focus]="isTourFocus('policies-actions')">
       <app-icon [name]="showCreate() ? 'x' : 'plus'" [size]="14" />
       <span>{{ showCreate() ? 'Cancelar' : 'Nueva política' }}</span>
     </button>
   </header>
 
-  <section class="card card-pad create-form" *ngIf="showCreate()">
+  <section class="card card-pad create-form" *ngIf="showCreate()" data-tour="policies-create" [class.tour-focus]="isTourFocus('policies-create')">
     <div class="block-head">
       <span class="eyebrow">Nueva política</span>
       <h3>Define los datos básicos</h3>
@@ -46,7 +46,7 @@
     </form>
   </section>
 
-  <div class="meter-row">
+  <div class="meter-row" data-tour="policies-meters" [class.tour-focus]="isTourFocus('policies-meters')">
     <article class="meter">
       <span>Total</span>
       <strong>{{ stats().total }}</strong>
@@ -73,7 +73,7 @@
     </article>
   </div>
 
-  <section class="filters card card-pad-sm">
+  <section class="filters card card-pad-sm" data-tour="policies-filters" [class.tour-focus]="isTourFocus('policies-filters')">
     <div class="search">
       <app-icon name="search" [size]="16" />
       <input
@@ -95,7 +95,7 @@
     </button>
   </section>
 
-  <section class="grid-cards" *ngIf="filtered().length; else emptyTpl">
+  <section class="grid-cards" *ngIf="filtered().length; else emptyTpl" data-tour="policies-cards" [class.tour-focus]="isTourFocus('policies-cards')">
     <article class="policy-card" *ngFor="let policy of filtered()" (click)="open(policy)">
       <header class="card-head">
         <div>
@@ -146,4 +146,30 @@
       </button>
     </div>
   </ng-template>
+
+  <div class="tour-backdrop" *ngIf="tourOpen()" (click)="closeTour()"></div>
+  <section
+    class="tour-card"
+    *ngIf="tourOpen()"
+    [style.top.px]="tourBubble().top"
+    [style.left.px]="tourBubble().left"
+    (click)="$event.stopPropagation()"
+  >
+    <header>
+      <span class="badge primary dot">Paso {{ tourIndex() + 1 }} de 5</span>
+      <button type="button" class="tour-close" (click)="closeTour()" aria-label="Cerrar recorrido">
+        <app-icon name="close" [size]="14" />
+      </button>
+    </header>
+    <h3>{{ currentTourStep().title }}</h3>
+    <p>{{ currentTourStep().body }}</p>
+    <footer>
+      <button type="button" class="btn ghost sm" (click)="previousTourStep()" [disabled]="tourIndex() === 0">
+        Anterior
+      </button>
+      <button type="button" class="btn primary sm" (click)="nextTourStep()">
+        {{ tourIndex() === 4 ? 'Finalizar' : 'Siguiente' }}
+      </button>
+    </footer>
+  </section>
 </section>

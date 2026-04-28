@@ -186,13 +186,21 @@ export class ShellComponent {
 
   private handleRouteSpecificGuide(url: string, force: boolean): boolean {
     if (typeof window === 'undefined') return false;
-    if (!url.includes('/app/inbox')) return false;
+    const route =
+      url.includes('/app/policies/') ? 'policy-designer'
+      : url.includes('/app/policies') ? 'policies'
+      : url.includes('/app/inbox') ? 'inbox'
+      : url.includes('/app/tramites') ? 'tramites'
+      : url.includes('/app/analytics') ? 'analytics'
+      : url.includes('/app/team') ? 'team'
+      : null;
+    if (!route) return false;
     if (!force && this.hasSeenGuide(url)) return true;
     this.markGuideSeen(url);
     window.dispatchEvent(
       new CustomEvent('workflow-ia:start-tour', {
         detail: {
-          route: 'inbox',
+          route,
           force
         }
       })

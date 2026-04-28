@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../../core/api.service';
@@ -15,6 +15,19 @@ interface DepartmentLoad {
   completadas: number;
 }
 
+type TourTarget = 'analytics-actions' | 'analytics-kpi' | 'analytics-load' | 'analytics-bottlenecks';
+
+interface PageTourStep {
+  target: TourTarget;
+  title: string;
+  body: string;
+}
+
+interface TourBubblePosition {
+  top: number;
+  left: number;
+}
+
 @Component({
   selector: 'app-analytics-page',
   standalone: true,
@@ -22,9 +35,10 @@ interface DepartmentLoad {
   templateUrl: './analytics-page.component.html',
   styleUrl: './analytics-page.component.scss'
 })
-export class AnalyticsPageComponent {
+export class AnalyticsPageComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
+  private readonly zone = inject(NgZone);
 
   readonly summary = signal<Summary | null>(null);
   readonly bottleneckData = signal<BottleneckData | null>(null);
@@ -33,6 +47,33 @@ export class AnalyticsPageComponent {
   readonly tramites = signal<Tramite[]>([]);
   readonly loading = signal(true);
   readonly exporting = signal<'csv' | 'json' | null>(null);
+  readonly tourOpen = signal(false);
+  readonly tourIndex = signal(0);
+  readonly tourBubble = signal<TourBubblePosition>({ top: 120, left: 120 });
+
+  private resizeHandler: (() => void) | null = null;
+  private readonly tourSteps: PageTourStep[] = [
+    {
+      target: 'analytics-actions',
+      title: 'Actualizar y exportar',
+      body: 'Desde aquí refrescas el tablero y exportas el reporte en JSON o CSV para compartir evidencia del sistema.'
+    },
+    {
+      target: 'analytics-kpi',
+      title: 'Indicadores clave',
+      body: 'Estos KPI muestran el pulso general: trámites, tareas, pendientes y tasa de cierre.'
+    },
+    {
+      target: 'analytics-load',
+      title: 'Carga operativa',
+      body: 'Aquí ves qué departamentos o tipos de trámite concentran más trabajo para detectar saturación.'
+    },
+    {
+      target: 'analytics-bottlenecks',
+      title: 'Cuellos de botella e IA',
+      body: 'Este bloque resume nodos críticos y la lectura de IA para que puedas justificar decisiones de mejora.'
+    }
+  ];
 
   readonly completionRate = computed(() => {
     const data = this.summary();
@@ -104,6 +145,11 @@ export class AnalyticsPageComponent {
 
   constructor() {
     void this.refresh();
+    this.bindTourListeners();
+  }
+
+  ngOnDestroy(): void {
+    this.unbindTourListeners();
   }
 
   async refresh(): Promise<void> {
@@ -158,5 +204,79 @@ export class AnalyticsPageComponent {
     } finally {
       this.exporting.set(null);
     }
+  }
+
+  currentTourStep(): PageTourStep {
+    return this.tourSteps[this.tourIndex()] ?? this.tourSteps[0];
+  }
+
+  isTourFocus(target: TourTarget): boolean {
+    return this.tourOpen() && this.currentTourStep().target === target;
+  }
+
+  nextTourStep(): void {
+    if (this.tourIndex() >= this.tourSteps.length - 1) {
+      this.closeTour();
+      return;
+    }
+    this.tourIndex.update((value) => value + 1);
+    this.syncTourPosition();
+  }
+
+  previousTourStep(): void {
+    if (this.tourIndex() <= 0) return;
+    this.tourIndex.update((value) => value - 1);
+    this.syncTourPosition();
+  }
+
+  closeTour(): void {
+    this.tourOpen.set(false);
+  }
+
+  private bindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    const handler = () => this.zone.run(() => this.syncTourPosition());
+    this.resizeHandler = handler;
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private unbindTourListeners(): void {
+    if (typeof window === 'undefined') return;
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      window.removeEventListener('scroll', this.resizeHandler, true);
+    }
+    window.removeEventListener('workflow-ia:start-tour', this.handleTourRequest as EventListener);
+  }
+
+  private readonly handleTourRequest = (event: CustomEvent<{ route?: string }>) => {
+    if (event.detail?.route !== 'analytics') return;
+    this.startTour();
+  };
+
+  private startTour(): void {
+    this.tourIndex.set(0);
+    this.tourOpen.set(true);
+    setTimeout(() => this.syncTourPosition(), 0);
+  }
+
+  private syncTourPosition(): void {
+    if (!this.tourOpen() || typeof document === 'undefined' || typeof window === 'undefined') return;
+    const element = document.querySelector<HTMLElement>(`[data-tour="${this.currentTourStep().target}"]`);
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const bubbleWidth = 360;
+    const spacing = 18;
+    let left = rect.left;
+    let top = rect.bottom + spacing;
+    if (left + bubbleWidth > window.innerWidth - 24) {
+      left = Math.max(16, window.innerWidth - bubbleWidth - 24);
+    }
+    if (top + 240 > window.innerHeight - 16) {
+      top = Math.max(16, rect.top - 240 - spacing);
+    }
+    this.tourBubble.set({ top, left });
   }
 }

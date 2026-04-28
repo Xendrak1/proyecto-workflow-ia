@@ -5,13 +5,13 @@
       <h1>Equipo</h1>
       <p class="muted">Crea miembros, asigna roles por departamento y gestiona los planes de suscripción.</p>
     </div>
-    <button type="button" class="btn primary" (click)="toggleCreate()">
+    <button type="button" class="btn primary" (click)="toggleCreate()" data-tour="team-actions" [class.tour-focus]="isTourFocus('team-actions')">
       <app-icon name="plus" [size]="14" />
       {{ showCreate() ? 'Cancelar' : 'Nuevo miembro' }}
     </button>
   </header>
 
-  <section class="create-card card card-pad" *ngIf="showCreate()">
+  <section class="create-card card card-pad" *ngIf="showCreate()" data-tour="team-create" [class.tour-focus]="isTourFocus('team-create')">
     <header class="block-head">
       <span class="eyebrow">Alta de usuario</span>
       <h3>Datos del nuevo miembro</h3>
@@ -65,7 +65,7 @@
     </form>
   </section>
 
-  <section class="meter-row">
+  <section class="meter-row" data-tour="team-meters" [class.tour-focus]="isTourFocus('team-meters')">
     <article class="meter">
       <span>Total</span>
       <strong>{{ stats().total }}</strong>
@@ -84,7 +84,7 @@
     </article>
   </section>
 
-  <section class="filter-bar">
+  <section class="filter-bar" data-tour="team-filters" [class.tour-focus]="isTourFocus('team-filters')">
     <div class="search">
       <app-icon name="search" [size]="14" />
       <input
@@ -102,7 +102,7 @@
     </div>
   </section>
 
-  <section class="card list-card" *ngIf="filtered().length; else emptyTpl">
+  <section class="card list-card" *ngIf="filtered().length; else emptyTpl" data-tour="team-list" [class.tour-focus]="isTourFocus('team-list')">
     <table class="dt">
       <thead>
         <tr>
@@ -168,4 +168,30 @@
       <strong *ngIf="!loading() && !users().length">Aún no hay miembros registrados</strong>
     </div>
   </ng-template>
+
+  <div class="tour-backdrop" *ngIf="tourOpen()" (click)="closeTour()"></div>
+  <section
+    class="tour-card"
+    *ngIf="tourOpen()"
+    [style.top.px]="tourBubble().top"
+    [style.left.px]="tourBubble().left"
+    (click)="$event.stopPropagation()"
+  >
+    <header>
+      <span class="badge primary dot">Paso {{ tourIndex() + 1 }} de 5</span>
+      <button type="button" class="tour-close" (click)="closeTour()" aria-label="Cerrar recorrido">
+        <app-icon name="close" [size]="14" />
+      </button>
+    </header>
+    <h3>{{ currentTourStep().title }}</h3>
+    <p>{{ currentTourStep().body }}</p>
+    <footer>
+      <button type="button" class="btn ghost sm" (click)="previousTourStep()" [disabled]="tourIndex() === 0">
+        Anterior
+      </button>
+      <button type="button" class="btn primary sm" (click)="nextTourStep()">
+        {{ tourIndex() === 4 ? 'Finalizar' : 'Siguiente' }}
+      </button>
+    </footer>
+  </section>
 </section>
