@@ -168,6 +168,10 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
     return this.session.hasPermission('task.evidence');
   }
 
+  isTaskReadOnly(task: Task | null): boolean {
+    return !!task && (task.status === 'completada' || !this.canEditTask());
+  }
+
   async generateAiFill(): Promise<void> {
     const reportText = this.aiForm.getRawValue().report_text?.trim() ?? '';
     if (!reportText || !this.task() || !this.currentNode()) {

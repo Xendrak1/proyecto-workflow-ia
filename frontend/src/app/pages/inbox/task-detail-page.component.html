@@ -53,8 +53,18 @@
           </p>
         </header>
 
+        <div class="readonly-banner" *ngIf="currentTask.status === 'completada'">
+          <app-icon name="info" [size]="16" />
+          <div>
+            <strong>Tarea completada</strong>
+            <p class="tiny">
+              Esta actividad ya fue cerrada. Puedes revisar la información cargada, pero ya no se puede editar ni adjuntar nuevos cambios.
+            </p>
+          </div>
+        </div>
+
         <ng-container *ngIf="fields().length; else noFields">
-          <form [formGroup]="dynamicForm()" class="dyn-form">
+          <form [formGroup]="dynamicForm()" class="dyn-form" [class.readonly-form]="isTaskReadOnly(currentTask)">
             <ng-container *ngFor="let field of fields()">
               <div class="field" [ngSwitch]="field.field_type">
                 <label>
@@ -67,20 +77,20 @@
                   [formControlName]="field.key"
                   rows="3"
                   placeholder="Escribe aquí…"
-                  [readonly]="!canEditTask()"
+                  [readonly]="isTaskReadOnly(currentTask)"
                 ></textarea>
 
-                <input *ngSwitchCase="'numero'" type="number" [formControlName]="field.key" [readonly]="!canEditTask()" />
+                <input *ngSwitchCase="'numero'" type="number" [formControlName]="field.key" [readonly]="isTaskReadOnly(currentTask)" />
 
-                <input *ngSwitchCase="'fecha'" type="date" [formControlName]="field.key" [readonly]="!canEditTask()" />
+                <input *ngSwitchCase="'fecha'" type="date" [formControlName]="field.key" [readonly]="isTaskReadOnly(currentTask)" />
 
-                <select *ngSwitchCase="'lista'" [formControlName]="field.key" [disabled]="!canEditTask()">
+                <select *ngSwitchCase="'lista'" [formControlName]="field.key" [disabled]="isTaskReadOnly(currentTask)">
                   <option value="">Selecciona una opción…</option>
                   <option *ngFor="let opt of field.options" [value]="opt">{{ opt }}</option>
                 </select>
 
                 <label *ngSwitchCase="'booleano'" class="check-row">
-                  <input type="checkbox" [formControlName]="field.key" [disabled]="!canEditTask()" />
+                  <input type="checkbox" [formControlName]="field.key" [disabled]="isTaskReadOnly(currentTask)" />
                   <span class="muted tiny">Marca si aplica</span>
                 </label>
 
@@ -89,7 +99,7 @@
                   type="text"
                   [formControlName]="field.key"
                   placeholder="URL o nombre del archivo cargado"
-                  [readonly]="!canEditTask()"
+                  [readonly]="isTaskReadOnly(currentTask)"
                 />
 
                 <input
@@ -97,10 +107,10 @@
                   type="text"
                   [formControlName]="field.key"
                   placeholder="URL de la imagen o referencia"
-                  [readonly]="!canEditTask()"
+                  [readonly]="isTaskReadOnly(currentTask)"
                 />
 
-                <input *ngSwitchDefault type="text" [formControlName]="field.key" [readonly]="!canEditTask()" />
+                <input *ngSwitchDefault type="text" [formControlName]="field.key" [readonly]="isTaskReadOnly(currentTask)" />
               </div>
             </ng-container>
           </form>
@@ -123,11 +133,11 @@
             placeholder="Anota detalles, decisiones o motivos relevantes…"
             [value]="observation()"
             (input)="updateObservation($event)"
-            [readonly]="!canEditTask()"
+            [readonly]="isTaskReadOnly(currentTask)"
           ></textarea>
         </div>
 
-        <section class="evidence-block" *ngIf="canUploadEvidence()">
+        <section class="evidence-block">
           <header class="block-head">
             <span class="eyebrow">Evidencias</span>
             <h3>Adjunta respaldo del trabajo realizado</h3>
@@ -136,7 +146,17 @@
             </p>
           </header>
 
-          <div class="evidence-upload">
+          <div class="readonly-banner subtle" *ngIf="currentTask.status === 'completada'">
+            <app-icon name="lock" [size]="16" />
+            <div>
+              <strong>Edición cerrada</strong>
+              <p class="tiny">
+                Las evidencias ya cargadas siguen visibles, pero esta tarea completada no acepta nuevas cargas.
+              </p>
+            </div>
+          </div>
+
+          <div class="evidence-upload" *ngIf="canUploadEvidence() && currentTask.status !== 'completada'">
             <label class="file-picker">
               <input type="file" (change)="onEvidencePicked($event)" />
               <span>{{ selectedEvidenceName() || 'Seleccionar archivo' }}</span>
