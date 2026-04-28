@@ -222,7 +222,7 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
     const suggestion = this.aiSuggestion();
     if (!suggestion) return;
     this.dynamicForm().patchValue(suggestion.form_data);
-    if (suggestion.observations && !this.observation().trim()) {
+    if (suggestion.observations && !this.observation().trim() && !this.hasObservationLikeFieldValue(suggestion.form_data)) {
       this.observation.set(suggestion.observations);
     }
     if (suggestion.transcript) {
@@ -615,6 +615,21 @@ export class TaskDetailPageComponent implements OnInit, OnDestroy {
   updateObservation(event: Event): void {
     const value = (event.target as HTMLTextAreaElement).value;
     this.observation.set(value);
+  }
+
+  private hasObservationLikeFieldValue(formData: Record<string, unknown>): boolean {
+    const observationLikeTokens = ['observ', 'descripcion', 'descripción', 'detalle', 'comentario', 'nota'];
+    return this.fields().some((field) => {
+      const searchText = `${field.key} ${field.label}`.toLowerCase();
+      if (!observationLikeTokens.some((token) => searchText.includes(token))) {
+        return false;
+      }
+      const value = formData[field.key];
+      if (typeof value === 'string') {
+        return value.trim().length > 0;
+      }
+      return value !== null && value !== undefined && value !== false;
+    });
   }
 
   private describeAiSource(source?: string | null): string | null {
