@@ -362,8 +362,6 @@ def generate_task_form_fill_local(payload: TaskFormFillRequest) -> TaskFormFillR
     fallback = _fallback_task_form_fill(payload)
     fallback.source = "local-heuristic"
     fallback.model = "local-parser"
-    fallback.summary = "Se extrajeron datos directamente del texto actual sin usar Gemini."
-    fallback.observations = "El sistema aplico reglas locales sobre el texto escrito o dictado para completar el formulario."
     return fallback
 
 
@@ -594,9 +592,92 @@ def _fallback_workflow_suggestion(payload: WorkflowSuggestionRequest) -> Workflo
     )
 
 
+# ── Deterministic node classification & observation helpers ──────────────────
+
+_INCIDENT_NODE_KEYWORDS = frozenset([
+    "incidente", "accidente", "caida", "caída", "lesion", "lesión",
+    "daño", "dano", "averia", "avería", "falla", "fallo",
+    "emergencia", "alerta", "novedad", "siniestro",
+])
+
+_REVIEW_NODE_KEYWORDS = frozenset([
+    "revision", "revisión", "control", "verificacion", "verificación",
+    "auditoria", "auditoría", "inspeccion", "inspección", "chequeo",
+    "supervision", "supervisión", "monitoreo", "calidad", "qa",
+    "conformidad", "evaluacion", "evaluación",
+])
+
+
+def _classify_node(node_name: str, lane: str) -> str:
+    """Returns 'incident', 'review', or 'general' based on node/lane keywords."""
+    combined = f"{node_name} {lane}".lower()
+    if any(kw in combined for kw in _INCIDENT_NODE_KEYWORDS):
+        return "incident"
+    if any(kw in combined for kw in _REVIEW_NODE_KEYWORDS):
+        return "review"
+    return "general"
+
+
+def _build_formal_observation(report_text: str, node_name: str, lane: str) -> str:
+    """Convert free-form report text into a formal 2-sentence operational observation.
+
+    Incident/review nodes get a category-specific closing recommendation.
+    The workflow flow is never described.
+    """
+    node_category = _classify_node(node_name, lane)
+
+    _EMPTY_OBS: dict[str, str] = {
+        "incident": (
+            f"Se registra una novedad en {node_name or 'el nodo de incidentes'}. "
+            "Se recomienda dar seguimiento según el procedimiento interno."
+        ),
+        "review": (
+            f"Se registra el resultado de revisión en {node_name or 'el nodo de control'}. "
+            "Se adjunta para resolución correspondiente."
+        ),
+        "general": (
+            f"Se registra la actividad en {node_name or 'el proceso'}. "
+            "Se procede según el procedimiento vigente."
+        ),
+    }
+
+    text = report_text.strip()
+    if not text:
+        return _EMPTY_OBS.get(node_category, _EMPTY_OBS["general"])
+
+    sentence = text[0].upper() + text[1:]
+    if sentence[-1] not in ".!?":
+        sentence += "."
+
+    _CLOSINGS: dict[str, str] = {
+        "incident": "Se recomienda registrar el incidente y dar seguimiento según el procedimiento interno.",
+        "review": "Se registran los hallazgos para su revisión y resolución correspondiente.",
+        "general": "Se registra la información para continuar con el proceso según el procedimiento vigente.",
+    }
+    closing = _CLOSINGS.get(node_category, _CLOSINGS["general"])
+    return f"{sentence} {closing}"
+
+
+def _build_contextual_summary(
+    report_text: str, node_name: str, lane: str, procedure_type: str | None
+) -> str:
+    """Build a short, fact-based summary without describing the workflow flow."""
+    node_category = _classify_node(node_name, lane)
+    context = procedure_type or node_name or "el trámite"
+    preview = (report_text[:80].rstrip() + "...") if len(report_text) > 80 else report_text.strip()
+
+    if node_category == "incident":
+        return f"Incidente reportado en {node_name or 'el proceso'}: {preview}"
+    if node_category == "review":
+        return f"Revisión registrada en {node_name or 'el proceso'}: {preview}"
+    return f"Informe recibido para {context}."
+
+
 def _fallback_task_form_fill(payload: TaskFormFillRequest) -> TaskFormFillResponse:
     form_data: dict = {}
     report_lower = payload.report_text.lower()
+    node_name = payload.node_name or ""
+    lane = payload.lane or ""
 
     for field in payload.fields:
         value: str | int | float | bool | None
@@ -614,7 +695,7 @@ def _fallback_task_form_fill(payload: TaskFormFillRequest) -> TaskFormFillRespon
                     value = option
                     break
         elif field.field_type in {"texto", "archivo", "imagen"}:
-            value = _infer_textual_field_value(field.key, field.label, payload.report_text)
+            value = _infer_textual_field_value(field.key, field.label, payload.report_text, node_name, lane)
         else:
             value = ""
         form_data[field.key] = value
@@ -622,14 +703,18 @@ def _fallback_task_form_fill(payload: TaskFormFillRequest) -> TaskFormFillRespon
     return TaskFormFillResponse(
         source="fallback",
         model=settings.gemini_model,
-        summary="Se genero una propuesta base para no dejar el formulario vacio.",
-        observations="La IA no devolvio una estructura perfecta y se preparo un llenado inicial revisable.",
+        summary=_build_contextual_summary(payload.report_text, node_name, lane, payload.procedure_type),
+        observations=_build_formal_observation(payload.report_text, node_name, lane),
         form_data=form_data,
     )
 
 
-def _infer_textual_field_value(field_key: str, field_label: str, report_text: str) -> str:
+def _infer_textual_field_value(
+    field_key: str, field_label: str, report_text: str, node_name: str = "", lane: str = ""
+) -> str:
     key = f"{field_key} {field_label}".lower()
+    if any(token in key for token in ["observ", "descripcion", "descripción", "detalle", "comentario", "nota"]):
+        return _build_formal_observation(report_text, node_name, lane)
     if any(token in key for token in ["telefon", "celular", "movil", "contacto"]):
         return _extract_phone(report_text)
     if any(token in key for token in ["direccion", "domicilio", "ubicacion", "ubicación"]):
