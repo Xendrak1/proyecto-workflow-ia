@@ -25,6 +25,7 @@ class WorkflowSuggestedNode(BaseModel):
     lane: str
     responsible_role: str | None = None
     responsible_department: str | None = None
+    form_fields: list[dict] = Field(default_factory=list)
 
 
 class WorkflowSuggestedTransition(BaseModel):

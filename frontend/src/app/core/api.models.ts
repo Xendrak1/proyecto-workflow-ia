@@ -77,6 +77,13 @@ export interface WorkflowSuggestion {
     lane: string;
     responsible_role?: string | null;
     responsible_department?: string | null;
+    form_fields?: Array<{
+      key: string;
+      label: string;
+      field_type: string;
+      required: boolean;
+      options: string[];
+    }>;
   }>;
   transitions: Array<{
     source_code: string;

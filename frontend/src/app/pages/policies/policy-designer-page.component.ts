@@ -187,7 +187,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
 
   readonly aiForm = this.fb.group({
     prompt: [
-      'Inicio -> Atención al cliente -> Revisión técnica -> Revisión legal -> Instalación -> Fin',
+      'Crear proceso completo para atención de pedidos de cliente',
       Validators.required
     ]
   });
@@ -779,10 +779,18 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     const lanesVocabulary = this.laneNames().length
       ? `\n\nCalles ya existentes en esta politica: ${this.laneNames().join(', ')}. Si una propuesta encaja en una de estas, reutiliza ese nombre exactamente.`
       : '';
+    const cycleTwoInstruction = [
+      'Instruccion interna obligatoria para la IA:',
+      'Genera una politica de negocio completa para usuarios no expertos, no un flujo lineal simple.',
+      'Debe verse como diagrama de actividad UML 2.5 con inicio, fin, decisiones, guardas, rutas de excepcion y, si aplica, fork/join.',
+      'Debe tener al menos 8 nodos cuando el tema sea ambiguo, 3 calles o mas, formularios por actividad importante y nombres profesionales.',
+      'Incluye validacion documental, revision/observacion, aprobacion o rechazo cuando el dominio lo permita.',
+      'No esperes que el usuario pida UML: asumelo siempre.'
+    ].join('\n');
     const finalPrompt =
       strategy === 'adapt' && currentDiagramContext
-        ? `${prompt}\n\nContexto del diagrama actual:\n${currentDiagramContext}\n\nAdapta la propuesta respetando lo ya existente cuando tenga sentido.${lanesVocabulary}`
-        : `${prompt}${lanesVocabulary}`;
+        ? `${cycleTwoInstruction}\n\nSolicitud del usuario:\n${prompt}\n\nContexto del diagrama actual:\n${currentDiagramContext}\n\nAdapta la propuesta, pero mejora el nivel UML si el flujo actual es demasiado simple.${lanesVocabulary}`
+        : `${cycleTwoInstruction}\n\nSolicitud del usuario:\n${prompt}${lanesVocabulary}`;
     this.aiGenerating.set(true);
     this.aiErrorDetail.set(null);
     this.aiSuggestion.set(null);
@@ -965,7 +973,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     const existing = new Set(existingNodes.keys());
     for (const node of suggestion.nodes) {
       if (!existing.has(node.code)) {
-        await firstValueFrom(this.api.addPolicyNode(policy._id, { ...node, form_fields: [] }));
+        await firstValueFrom(this.api.addPolicyNode(policy._id, { ...node, form_fields: node.form_fields ?? [] }));
         existing.add(node.code);
         existingNodes.set(node.code, {
           ...node,
