@@ -145,9 +145,16 @@ WORKFLOW_RESPONSE_SCHEMA = {
                     "name": {"type": "string"},
                     "node_type": {
                         "type": "string",
+                        "description": (
+                            "Elemento de diagrama de actividad UML 2.5: inicio=initial node, "
+                            "actividad=action, decision=decision diamond, fork/join=barras de paralelismo, fin=activity final."
+                        ),
                         "enum": ["actividad", "decision", "inicio", "fin", "fork", "join"],
                     },
-                    "lane": {"type": "string"},
+                    "lane": {
+                        "type": "string",
+                        "description": "Particion/calle UML que representa area, rol o departamento responsable.",
+                    },
                     "responsible_role": {"type": "string"},
                     "responsible_department": {"type": "string"},
                 },
@@ -163,9 +170,16 @@ WORKFLOW_RESPONSE_SCHEMA = {
                     "target_code": {"type": "string"},
                     "transition_type": {
                         "type": "string",
+                        "description": (
+                            "Tipo de flujo UML: secuencial=control flow normal, alternativa=salida con guarda, "
+                            "iterativa=retorno o reproceso, paralela=flujo asociado a fork/join."
+                        ),
                         "enum": ["secuencial", "alternativa", "iterativa", "paralela"],
                     },
-                    "condition_label": {"type": "string"},
+                    "condition_label": {
+                        "type": "string",
+                        "description": "Guarda UML para decisiones o iteraciones, por ejemplo Aprobado, Rechazado, Si, No.",
+                    },
                 },
             },
         },
@@ -174,24 +188,33 @@ WORKFLOW_RESPONSE_SCHEMA = {
 
 def _build_prompt(payload: WorkflowSuggestionRequest, transcript: str | None = None) -> str:
     context_lines = [
-        "Eres un analista de procesos de negocio.",
-        "Debes convertir el texto del usuario en un workflow para una organizacion.",
+        "Eres un analista de procesos de negocio y modelador UML.",
+        "Debes convertir el texto del usuario en un diagrama de actividad UML 2.5 para una organizacion.",
         "Responde solo con JSON valido que cumpla exactamente el esquema solicitado.",
         "No uses markdown. No uses bloques ```json. No agregues texto antes ni despues del JSON.",
         "Devuelve exactamente un objeto JSON con las claves title, summary, nodes y transitions.",
         "Usa nombres y codigos cortos, claros y sin espacios.",
         "Los codigos deben ser alfanumericos, cortos y en mayusculas. Ejemplos: INI, ATC, REVTEC, LEG, FIN.",
-        "Mapea areas o departamentos a lanes.",
-        "Cada node debe tener una lane coherente con el proceso.",
-        "No inventes transiciones que apunten a codigos inexistentes.",
-        "Si el flujo menciona decisiones, usa node_type='decision' y transition_type='alternativa' cuando corresponda.",
-        "Si no se menciona un inicio o fin explicito, agregalos.",
+        "Mapea areas, roles o departamentos a lanes como particiones/calles UML.",
+        "Cada node debe tener una lane coherente con el proceso y, si aplica, responsible_role y responsible_department.",
+        "Usa node_type='inicio' para el nodo inicial UML y node_type='fin' para el nodo final de actividad.",
+        "Usa node_type='actividad' para acciones atomicas redactadas con verbo en infinitivo o imperativo.",
+        "Usa node_type='decision' para bifurcaciones condicionales; sus salidas deben usar transition_type='alternativa' y condition_label.",
+        "Usa condition_label como guarda UML breve: Si, No, Aprobado, Rechazado, Completo, Observado, etc.",
+        "Usa node_type='fork' cuando un flujo se divide en trabajo paralelo y node_type='join' para sincronizarlo.",
+        "Usa transition_type='paralela' en flujos que salen de un fork o entran a un join.",
+        "Usa transition_type='iterativa' para reintentos, devoluciones, subsanaciones o reprocesos.",
+        "Usa transition_type='secuencial' para el control flow normal.",
+        "No inventes transiciones que apunten a codigos inexistentes ni dejes nodos aislados.",
+        "No crees transiciones hacia el nodo inicio ni salidas desde el nodo fin.",
+        "Debe existir al menos una ruta valida desde inicio hasta fin.",
+        "Si no se menciona un inicio o fin explicito, agregalos exactamente una vez.",
         "Todos los textos deben quedar en espanol.",
         "Si el prompt es corto o ambiguo, infiere un flujo base razonable segun el contexto disponible.",
         "Si mencionan COTAS, piensa en solicitudes de servicio, revision tecnica, validacion administrativa o legal, ejecucion y cierre.",
         "Si el usuario pide adaptar, intenta conservar nodos, calles o relaciones ya existentes cuando sigan teniendo sentido.",
         "Si el usuario pide reemplazar, puedes proponer un flujo nuevo completo.",
-        'Ejemplo de salida valida: {"title":"Flujo de Cotas","summary":"Resumen breve","nodes":[{"code":"INI","name":"Inicio","node_type":"inicio","lane":"Sistema"},{"code":"ATC","name":"Registrar solicitud","node_type":"actividad","lane":"Atencion al Cliente"}],"transitions":[{"source_code":"INI","target_code":"ATC","transition_type":"secuencial"}]}',
+        'Ejemplo de salida valida: {"title":"Flujo de Cotas","summary":"Resumen breve","nodes":[{"code":"INI","name":"Inicio","node_type":"inicio","lane":"Sistema"},{"code":"ATC","name":"Registrar solicitud","node_type":"actividad","lane":"Atencion al Cliente"},{"code":"DOCOK","name":"Documentos completos?","node_type":"decision","lane":"Atencion al Cliente"},{"code":"FIN","name":"Fin","node_type":"fin","lane":"Sistema"}],"transitions":[{"source_code":"INI","target_code":"ATC","transition_type":"secuencial"},{"source_code":"ATC","target_code":"DOCOK","transition_type":"secuencial"},{"source_code":"DOCOK","target_code":"FIN","transition_type":"alternativa","condition_label":"Si"}]}',
     ]
     if payload.policy_name:
         context_lines.append(f"Nombre de la politica: {payload.policy_name}")
