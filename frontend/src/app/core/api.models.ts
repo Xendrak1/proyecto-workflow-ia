@@ -193,6 +193,10 @@ export interface DocumentRecord {
   permissions: DocumentPermission[];
   current_version: number;
   versions: DocumentVersion[];
+  collaborative_content?: string;
+  collaborative_revision?: number;
+  collaborative_updated_by?: string | null;
+  collaborative_updated_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }

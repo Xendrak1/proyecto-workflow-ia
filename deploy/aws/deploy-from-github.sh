@@ -39,6 +39,12 @@ cd "$ROOT_DIR/frontend"
 npm install
 npm run build
 
+echo "==> Actualizando configuracion nginx"
+sudo sed -e "s|ROOT_PATH_PLACEHOLDER|$ROOT_DIR|g" -e "s|SERVER_NAME_PLACEHOLDER|_|g" \
+  "$ROOT_DIR/deploy/aws/workflow-ia.nginx.conf" \
+  | sudo tee "/etc/nginx/sites-available/${SERVICE_NAME}" >/dev/null
+sudo nginx -t
+
 echo "==> Reiniciando servicios"
 sudo systemctl restart "${SERVICE_NAME}"
 sudo systemctl restart nginx

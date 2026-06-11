@@ -91,6 +91,9 @@
             {{ versioningDocumentId() === document._id ? 'Subiendo...' : 'Nueva versión' }}
             <input type="file" (change)="uploadNewVersion(document, $event)" [disabled]="versioningDocumentId() === document._id" />
           </label>
+          <button type="button" class="btn sm" (click)="openCollaborativeEditor(document)">
+            <app-icon name="users" [size]="14" /> Editar en vivo
+          </button>
         </div>
       </article>
     </div>
@@ -101,6 +104,33 @@
         <span class="tiny">Sube PDFs, imágenes, hojas electrónicas o documentos de apoyo.</span>
       </div>
     </ng-template>
+
+    <section class="collab-editor" *ngIf="activeDocument() as active">
+      <header>
+        <div>
+          <span class="eyebrow">Edición colaborativa</span>
+          <h4>{{ active.title }}</h4>
+          <p class="muted tiny">
+            Acta/notas vivas del documento · rev {{ editorRevision() }}
+            <ng-container *ngIf="active.collaborative_updated_by">
+              · último cambio por {{ active.collaborative_updated_by }}
+            </ng-container>
+          </p>
+        </div>
+        <div class="collab-meta">
+          <span class="live-pill" [class.connected]="documentCollabConnected()">
+            <span></span>{{ documentCollabConnected() ? 'En vivo' : 'Conectando' }}
+          </span>
+          <span class="badge neutral">{{ documentCollaborators().length }} conectado(s)</span>
+          <button type="button" class="btn ghost sm" (click)="closeCollaborativeEditor()">Cerrar</button>
+        </div>
+      </header>
+      <textarea
+        [ngModel]="editorContent()"
+        (ngModelChange)="onEditorInput($event)"
+        placeholder="Escriban aquí observaciones, acuerdos, cambios solicitados o contenido textual del documento..."
+      ></textarea>
+    </section>
 
     <div class="audit-strip" *ngIf="auditLogs().length">
       <header>

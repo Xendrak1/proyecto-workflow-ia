@@ -13,6 +13,7 @@ AuditAction = Literal[
     "document.versioned",
     "document.viewed",
     "document.permissions.updated",
+    "document.collaborative_edit",
     "report.generated",
     "routing.predicted",
 ]
@@ -53,6 +54,10 @@ class DocumentRecord(MongoModel):
     permissions: list[DocumentPermission] = Field(default_factory=list)
     current_version: int = 1
     versions: list[DocumentVersion] = Field(default_factory=list)
+    collaborative_content: str = ""
+    collaborative_revision: int = 0
+    collaborative_updated_by: str | None = None
+    collaborative_updated_at: datetime | None = None
     locked_by: str | None = None
     locked_at: datetime | None = None
 

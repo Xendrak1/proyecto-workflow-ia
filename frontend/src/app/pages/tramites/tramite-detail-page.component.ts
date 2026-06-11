@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, Input, NgZone, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -18,6 +18,11 @@ interface TimelineStep {
   status: 'completed' | 'current' | 'pending';
 }
 
+interface Collaborator {
+  id: string;
+  name: string;
+}
+
 @Component({
   selector: 'app-tramite-detail-page',
   standalone: true,
@@ -25,13 +30,14 @@ interface TimelineStep {
   templateUrl: './tramite-detail-page.component.html',
   styleUrl: './tramite-detail-page.component.scss'
 })
-export class TramiteDetailPageComponent implements OnInit {
+export class TramiteDetailPageComponent implements OnInit, OnDestroy {
   @Input() tramiteCode = '';
 
   private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   private readonly session = inject(SessionService);
+  private readonly zone = inject(NgZone);
 
   readonly tramite = signal<Tramite | null>(null);
   readonly tasks = signal<Task[]>([]);
@@ -41,9 +47,16 @@ export class TramiteDetailPageComponent implements OnInit {
   readonly loading = signal(true);
   readonly uploadingDocument = signal(false);
   readonly versioningDocumentId = signal<string | null>(null);
+  readonly activeDocument = signal<DocumentRecord | null>(null);
+  readonly editorContent = signal('');
+  readonly documentCollabConnected = signal(false);
+  readonly documentCollaborators = signal<Collaborator[]>([]);
+  readonly editorRevision = signal(0);
   documentTitle = '';
   documentDescription = '';
   selectedDocumentFile: File | null = null;
+  private documentSocket: WebSocket | null = null;
+  private editorSendTimer: number | null = null;
 
   readonly timeline = computed<TimelineStep[]>(() => {
     const policy = this.policy();
@@ -86,6 +99,10 @@ export class TramiteDetailPageComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.tramiteCode) void this.load();
+  }
+
+  ngOnDestroy(): void {
+    this.closeCollaborativeEditor();
   }
 
   async load(): Promise<void> {
@@ -212,6 +229,105 @@ export class TramiteDetailPageComponent implements OnInit {
 
   fileUrl(document: DocumentRecord): string | null {
     return this.currentVersion(document)?.file_url ?? null;
+  }
+
+  openCollaborativeEditor(document: DocumentRecord): void {
+    this.closeCollaborativeEditor();
+    this.activeDocument.set(document);
+    this.editorContent.set(document.collaborative_content ?? '');
+    this.editorRevision.set(document.collaborative_revision ?? 0);
+    if (typeof window === 'undefined') return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const user = encodeURIComponent(this.currentActorName());
+    const socket = new WebSocket(`${protocol}//${window.location.host}/ws/documents/${document._id}?user=${user}`);
+    this.documentSocket = socket;
+    socket.onopen = () => this.zone.run(() => this.documentCollabConnected.set(true));
+    socket.onclose = () =>
+      this.zone.run(() => {
+        if (this.documentSocket !== socket) return;
+        this.documentCollabConnected.set(false);
+        this.documentSocket = null;
+      });
+    socket.onerror = () => socket.close();
+    socket.onmessage = (event) => this.zone.run(() => this.handleDocumentSocketMessage(event.data));
+  }
+
+  closeCollaborativeEditor(): void {
+    if (this.editorSendTimer !== null && typeof window !== 'undefined') {
+      window.clearTimeout(this.editorSendTimer);
+      this.editorSendTimer = null;
+    }
+    this.documentSocket?.close();
+    this.documentSocket = null;
+    this.activeDocument.set(null);
+    this.editorContent.set('');
+    this.editorRevision.set(0);
+    this.documentCollabConnected.set(false);
+    this.documentCollaborators.set([]);
+  }
+
+  onEditorInput(value: string): void {
+    this.editorContent.set(value);
+    if (this.editorSendTimer !== null) window.clearTimeout(this.editorSendTimer);
+    this.editorSendTimer = window.setTimeout(() => {
+      this.editorSendTimer = null;
+      this.sendDocumentEdit();
+    }, 450);
+  }
+
+  private sendDocumentEdit(): void {
+    const document = this.activeDocument();
+    const socket = this.documentSocket;
+    if (!document || !socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(
+      JSON.stringify({
+        type: 'document.edit',
+        actor_name: this.currentActorName(),
+        content: this.editorContent(),
+        revision: this.editorRevision(),
+      })
+    );
+  }
+
+  private handleDocumentSocketMessage(raw: string): void {
+    try {
+      const message = JSON.parse(raw) as {
+        type?: string;
+        users?: Collaborator[];
+        document_id?: string;
+        content?: string;
+        revision?: number;
+        updated_by?: string | null;
+        updated_at?: string | null;
+      };
+      if (message.type?.startsWith('presence.')) {
+        this.documentCollaborators.set(message.users ?? []);
+        return;
+      }
+      if (message.type !== 'document.state' && message.type !== 'document.edit') return;
+
+      const active = this.activeDocument();
+      if (!active || message.document_id !== active._id) return;
+      const revision = Number(message.revision ?? 0);
+      this.editorRevision.set(revision);
+      this.editorContent.set(message.content ?? '');
+      const updated: DocumentRecord = {
+        ...active,
+        collaborative_content: message.content ?? '',
+        collaborative_revision: revision,
+        collaborative_updated_by: message.updated_by ?? null,
+        collaborative_updated_at: message.updated_at ?? null,
+      };
+      this.activeDocument.set(updated);
+      this.documents.update((items) => items.map((item) => (item._id === updated._id ? updated : item)));
+    } catch {
+      return;
+    }
+  }
+
+  private currentActorName(): string {
+    return this.session.fullName() || this.session.email() || 'Usuario';
   }
 
   badgeForStatus(status: string): string {

@@ -90,6 +90,13 @@
           </button>
         </div>
         <div class="tools right">
+          <span class="live-pill" [class.connected]="collabConnected()">
+            <span class="live-dot"></span>
+            {{ collabConnected() ? 'En vivo' : 'Reconectando' }}
+          </span>
+          <span class="collab-count" title="Usuarios conectados">
+            {{ collaborators().length }} conectado(s)
+          </span>
           <button type="button" class="tool" (click)="autoOrganize()" [disabled]="organizing()" title="Organizar automáticamente">
             <app-icon name="layers" [size]="14" /> {{ organizing() ? 'Organizando...' : 'Organizar' }}
           </button>
@@ -263,6 +270,15 @@
                   <app-icon name="x" [size]="12" />
                 </button>
               </article>
+              <div
+                class="remote-cursor"
+                *ngFor="let cursor of remoteCursors()"
+                [style.left.px]="cursor.x"
+                [style.top.px]="cursor.y"
+              >
+                <span></span>
+                <strong>{{ cursor.user }}</strong>
+              </div>
             </div>
           </div>
         </div>

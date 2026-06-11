@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../../core/api.service';
 import { Policy, PolicyNode, PolicyTransition, WorkflowSuggestion } from '../../core/api.models';
+import { SessionService } from '../../core/session.service';
 import { ToastService } from '../../core/toast.service';
 import { IconComponent } from '../../shared/icon.component';
 
@@ -73,6 +74,20 @@ interface TourBubblePosition {
   left: number;
 }
 
+interface Collaborator {
+  id: string;
+  name: string;
+}
+
+interface RemoteCursor {
+  id: string;
+  user: string;
+  node_code: string | null;
+  x: number;
+  y: number;
+  at: number;
+}
+
 @Component({
   selector: 'app-policy-designer-page',
   standalone: true,
@@ -101,6 +116,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly zone = inject(NgZone);
+  private readonly session = inject(SessionService);
 
   readonly policy = signal<Policy | null>(null);
   readonly loading = signal(true);
@@ -134,6 +150,9 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   readonly tourOpen = signal(false);
   readonly tourIndex = signal(0);
   readonly tourBubble = signal<TourBubblePosition>({ top: 120, left: 120 });
+  readonly collabConnected = signal(false);
+  readonly collaborators = signal<Collaborator[]>([]);
+  readonly remoteCursors = signal<RemoteCursor[]>([]);
 
   private resizeTourHandler: (() => void) | null = null;
   private readonly tourSteps: PageTourStep[] = [
@@ -349,8 +368,12 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   private refreshTimerId: number | null = null;
   private lastPolicyFingerprint = '';
   private laneControlsObserver: ResizeObserver | null = null;
+  private policySocket: WebSocket | null = null;
+  private reconnectTimerId: number | null = null;
+  private destroyed = false;
 
   ngOnInit(): void {
+    this.destroyed = false;
     if (!this.canUseVoice()) {
       this.aiStatus.set(
         'Describe el flujo en lenguaje natural y aplica la propuesta. Este navegador no expone ni dictado ni grabación de audio.'
@@ -360,7 +383,10 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
         'Puedes escribir el flujo o grabar audio. Si el dictado directo no aparece, la app enviará la grabación a Gemini.'
       );
     }
-    if (this.policyId) this.loadPolicy(this.policyId);
+    if (this.policyId) {
+      this.loadPolicy(this.policyId);
+      this.connectPolicySocket();
+    }
     this.startCollaborationRefresh();
     this.bindTourListeners();
     if (typeof document !== 'undefined') {
@@ -377,11 +403,18 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.speechRecognition?.stop();
     if (this.refreshTimerId !== null) {
       window.clearInterval(this.refreshTimerId);
       this.refreshTimerId = null;
     }
+    if (this.reconnectTimerId !== null) {
+      window.clearTimeout(this.reconnectTimerId);
+      this.reconnectTimerId = null;
+    }
+    this.policySocket?.close();
+    this.policySocket = null;
     this.laneControlsObserver?.disconnect();
     this.laneControlsObserver = null;
     this.unbindTourListeners();
@@ -394,6 +427,94 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.fullscreen.set(!!document.fullscreenElement);
     window.setTimeout(() => this.syncLaneTopPadding(), 50);
   };
+
+  private connectPolicySocket(): void {
+    if (!this.policyId || typeof window === 'undefined' || this.policySocket) return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const user = encodeURIComponent(this.currentActorName());
+    const socket = new WebSocket(`${protocol}//${window.location.host}/ws/policies/${this.policyId}?user=${user}`);
+    this.policySocket = socket;
+
+    socket.onopen = () => this.zone.run(() => this.collabConnected.set(true));
+    socket.onclose = () =>
+      this.zone.run(() => {
+        this.collabConnected.set(false);
+        this.policySocket = null;
+        if (this.destroyed) return;
+        if (this.reconnectTimerId === null) {
+          this.reconnectTimerId = window.setTimeout(() => {
+            this.reconnectTimerId = null;
+            this.connectPolicySocket();
+          }, 2500);
+        }
+      });
+    socket.onerror = () => socket.close();
+    socket.onmessage = (event) => {
+      this.zone.run(() => this.handlePolicySocketMessage(event.data));
+    };
+  }
+
+  private handlePolicySocketMessage(raw: string): void {
+    try {
+      const message = JSON.parse(raw) as {
+        type?: string;
+        users?: Collaborator[];
+        user?: string;
+        node_code?: string | null;
+        x?: number;
+        y?: number;
+      };
+      if (message.type?.startsWith('presence.')) {
+        this.collaborators.set(message.users ?? []);
+        return;
+      }
+      if (message.type === 'policy.changed') {
+        void this.refreshPolicyIfChanged();
+        return;
+      }
+      if (message.type === 'cursor' && message.user) {
+        const cursor: RemoteCursor = {
+          id: `${message.user}-${message.node_code ?? 'canvas'}`,
+          user: message.user,
+          node_code: message.node_code ?? null,
+          x: Number(message.x ?? 80),
+          y: Number(message.y ?? 80),
+          at: Date.now(),
+        };
+        this.remoteCursors.update((items) => [
+          cursor,
+          ...items.filter((item) => item.id !== cursor.id && Date.now() - item.at < 15000),
+        ].slice(0, 8));
+      }
+    } catch {
+      return;
+    }
+  }
+
+  private notifyPolicyChanged(reason: string): void {
+    const socket = this.policySocket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: 'policy.changed', user: this.currentActorName(), reason }));
+  }
+
+  private sendPolicyCursor(nodeCode: string): void {
+    const socket = this.policySocket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    const node = this.diagramNodes().find((item) => item.code === nodeCode);
+    socket.send(
+      JSON.stringify({
+        type: 'cursor',
+        user: this.currentActorName(),
+        node_code: nodeCode,
+        x: node ? node.x + node.width / 2 : 80,
+        y: node ? node.y + node.height / 2 : 80,
+      })
+    );
+  }
+
+  private currentActorName(): string {
+    return this.session.fullName() || this.session.email() || 'Usuario';
+  }
 
   private detectVoiceSupport(): boolean {
     if (typeof window === 'undefined') return false;
@@ -468,6 +589,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   selectNode(code: string): void {
     this.selectedNodeCode.set(code);
     this.panel.set('inspector');
+    this.sendPolicyCursor(code);
   }
 
   setPanel(panel: PanelKey): void {
@@ -540,6 +662,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.cancelLaneEdit();
     this.clearLayout(policy._id);
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('lane.updated');
   }
 
   async deleteLane(lane: string): Promise<void> {
@@ -562,6 +685,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.cancelLaneEdit();
     this.clearLayout(policy._id);
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('lane.deleted');
   }
 
   async createLane(): Promise<void> {
@@ -599,6 +723,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.cancelLaneCreate();
     this.clearLayout(policy._id);
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('lane.created');
   }
 
   // ----- Quick actions -----
@@ -638,6 +763,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     );
     this.toast.success('Nodo creado', `${nextCode} añadido al diagrama`);
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('node.quick_created');
   }
 
   async createNode(): Promise<void> {
@@ -668,6 +794,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       responsible_department: 'Atención al cliente'
     });
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('node.created');
   }
 
   async deleteNode(code: string): Promise<void> {
@@ -677,6 +804,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.toast.info('Nodo eliminado', code);
     if (this.selectedNodeCode() === code) this.selectedNodeCode.set(null);
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('node.deleted');
   }
 
   async createTransition(): Promise<void> {
@@ -697,6 +825,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.toast.success('Transición añadida');
     this.transitionForm.patchValue({ condition_label: '', transition_type: 'secuencial' });
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('transition.created');
   }
 
   async deleteTransition(transition: PolicyTransition): Promise<void> {
@@ -705,6 +834,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     await firstValueFrom(this.api.deletePolicyTransition(policy._id, transition._id));
     this.toast.info('Transición eliminada');
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('transition.deleted');
   }
 
   async addField(): Promise<void> {
@@ -742,6 +872,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       options_text: ''
     });
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('field.created');
   }
 
   async removeField(key: string): Promise<void> {
@@ -755,6 +886,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     );
     this.toast.info('Campo eliminado');
     this.loadPolicy(policy._id);
+    this.notifyPolicyChanged('field.deleted');
   }
 
   validate(): void {
@@ -765,6 +897,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
         if (response.data.valid) this.toast.success('Política validada', 'Lista para publicarse');
         else this.toast.warn('Hay observaciones', response.data.observations.join(' · '));
         this.loadPolicy(policy._id);
+        this.notifyPolicyChanged('policy.validated');
       }
     });
   }
@@ -776,6 +909,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       next: () => {
         this.toast.success('Política publicada', 'Los trámites podrán usar esta política');
         this.loadPolicy(policy._id);
+        this.notifyPolicyChanged('policy.published');
       }
     });
   }
@@ -1042,6 +1176,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       this.clearLayout(policy._id);
       const finalPolicy = (await firstValueFrom(this.api.getPolicy(policy._id))).data;
       this.applyPolicySnapshot(finalPolicy, false);
+      this.notifyPolicyChanged('ai.applied');
       window.setTimeout(() => this.autoOrganize(), 80);
     } finally {
       this.organizing.set(false);
