@@ -72,11 +72,29 @@ def store_document_file(
     if provider not in {"local", "s3"}:
         provider = "local"
 
-    # S3-ready: while AWS is not configured, persist locally using the same object key.
-    # Later this function is the only place that needs a boto3 put_object call.
+    # Keep a local mirror so the current UI can open files even when S3 is private.
     target = uploads_root / document_id / stored_name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
+
+    stored_provider = "local"
+    if provider == "s3" and settings.aws_s3_bucket:
+        try:
+            import boto3  # type: ignore[import]
+
+            extra_args: dict[str, str] = {}
+            if content_type:
+                extra_args["ContentType"] = content_type
+            s3 = boto3.client("s3", region_name=settings.aws_region)
+            s3.put_object(
+                Bucket=settings.aws_s3_bucket,
+                Key=object_key,
+                Body=content,
+                **extra_args,
+            )
+            stored_provider = "s3"
+        except Exception:
+            stored_provider = "local"
 
     return StoredFile(
         file_name=safe_name,
@@ -84,7 +102,7 @@ def store_document_file(
         content_type=content_type,
         size_bytes=len(content),
         checksum_sha256=checksum,
-        storage_provider="s3" if provider == "s3" else "local",
+        storage_provider=stored_provider,
         storage_bucket=settings.aws_s3_bucket,
         storage_key=object_key,
     )
