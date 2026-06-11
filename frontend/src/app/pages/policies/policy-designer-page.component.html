@@ -67,7 +67,13 @@
   </div>
 
   <section class="studio">
-    <article class="canvas-card" data-tour="designer-canvas" [class.tour-focus]="isTourFocus('designer-canvas')">
+    <article
+      class="canvas-card"
+      #designerCanvas
+      data-tour="designer-canvas"
+      [class.tour-focus]="isTourFocus('designer-canvas')"
+      [class.fullscreen-active]="fullscreen()"
+    >
       <div class="canvas-toolbar">
         <div class="tools">
           <button type="button" class="tool" (click)="quickAdd('inicio')">
@@ -97,6 +103,9 @@
           </button>
           <button type="button" class="tool" (click)="resetView()" title="Centrar">
             <app-icon name="target" [size]="14" />
+          </button>
+          <button type="button" class="tool" (click)="toggleFullscreen()" title="Pantalla completa">
+            <app-icon [name]="fullscreen() ? 'minimize' : 'maximize'" [size]="14" />
           </button>
         </div>
       </div>

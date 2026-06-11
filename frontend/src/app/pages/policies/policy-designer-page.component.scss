@@ -150,6 +150,30 @@
   flex-direction: column;
   min-height: 620px;
   box-shadow: var(--shadow-sm);
+
+  &:fullscreen,
+  &.fullscreen-active {
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+    background: var(--bg-surface);
+
+    .canvas-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+
+    .diagram-shell {
+      min-height: calc(100vh - 58px);
+    }
+
+    .stage {
+      min-height: calc(100vh - 58px);
+    }
+  }
 }
 
 .help-banner {

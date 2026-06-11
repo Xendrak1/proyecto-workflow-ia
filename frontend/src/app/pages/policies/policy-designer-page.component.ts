@@ -94,6 +94,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
 
   @Input() policyId = '';
   @ViewChild('laneControls') laneControlsRef?: ElementRef<HTMLElement>;
+  @ViewChild('designerCanvas') designerCanvasRef?: ElementRef<HTMLElement>;
 
   private readonly api = inject(ApiService);
   private readonly fb = inject(FormBuilder);
@@ -118,6 +119,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   readonly aiErrorDetail = signal<string | null>(null);
   readonly aiHistory = signal<AIHistoryItem[]>([]);
   readonly applyingAi = signal(false);
+  readonly fullscreen = signal(false);
   readonly voiceSupported = signal(this.detectVoiceSupport());
   readonly recordingSupported = signal(typeof MediaRecorder !== 'undefined' && typeof navigator !== 'undefined');
   readonly aiRecording = signal(false);
@@ -361,6 +363,9 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     if (this.policyId) this.loadPolicy(this.policyId);
     this.startCollaborationRefresh();
     this.bindTourListeners();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('fullscreenchange', this.handleFullscreenChange);
+    }
   }
 
   ngAfterViewInit(): void {
@@ -380,7 +385,15 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.laneControlsObserver?.disconnect();
     this.laneControlsObserver = null;
     this.unbindTourListeners();
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
+    }
   }
+
+  private readonly handleFullscreenChange = () => {
+    this.fullscreen.set(!!document.fullscreenElement);
+    window.setTimeout(() => this.syncLaneTopPadding(), 50);
+  };
 
   private detectVoiceSupport(): boolean {
     if (typeof window === 'undefined') return false;
@@ -1048,6 +1061,20 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     this.canvasOffset.set({ x: 0, y: 0 });
   }
 
+  async toggleFullscreen(): Promise<void> {
+    const target = this.designerCanvasRef?.nativeElement;
+    if (!target || typeof document === 'undefined') return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await target.requestFullscreen();
+      }
+    } catch {
+      this.toast.warn('Pantalla completa no disponible en este navegador');
+    }
+  }
+
   startCanvasPan(event: MouseEvent, board: HTMLElement): void {
     if ((event.target as HTMLElement)?.closest('.diagram-card')) return;
     event.preventDefault();
@@ -1180,12 +1207,19 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
       }));
       for (const item of queue) depth.set(item.code, 0);
 
+      const outgoingBySource = new Map<string, PolicyTransition[]>();
+      for (const transition of transitions) {
+        const list = outgoingBySource.get(transition.source_code) ?? [];
+        list.push(transition);
+        outgoingBySource.set(transition.source_code, list);
+      }
+
       while (queue.length) {
         const { code, level } = queue.shift()!;
-        for (const t of transitions.filter((tr) => tr.source_code === code)) {
+        for (const t of outgoingBySource.get(code) ?? []) {
           const next = level + 1;
           const existing = depth.get(t.target_code);
-          if (existing === undefined || existing < next) {
+          if (existing === undefined) {
             depth.set(t.target_code, next);
             queue.push({ code: t.target_code, level: next });
           }

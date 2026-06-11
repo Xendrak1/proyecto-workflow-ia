@@ -53,6 +53,8 @@ const PATHS: Record<string, string> = {
   stop: 'M5 5h14v14H5z',
   zoomIn: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z M21 21l-4.3-4.3 M11 8v6 M8 11h6',
   zoomOut: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z M21 21l-4.3-4.3 M8 11h6',
+  maximize: 'M8 3H5a2 2 0 0 0-2 2v3 M16 3h3a2 2 0 0 1 2 2v3 M8 21H5a2 2 0 0 1-2-2v-3 M21 16v3a2 2 0 0 1-2 2h-3',
+  minimize: 'M8 3v3a2 2 0 0 1-2 2H3 M16 3v3a2 2 0 0 0 2 2h3 M8 21v-3a2 2 0 0 0-2-2H3 M16 21v-3a2 2 0 0 1 2-2h3',
   refresh:
     'M3 12a9 9 0 0 1 15-6.7L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-15 6.7L3 16 M3 21v-5h5',
   send: 'M22 2 11 13 M22 2l-7 20-4-9-9-4 20-7z',
