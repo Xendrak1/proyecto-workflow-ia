@@ -117,6 +117,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   readonly aiGenerating = signal(false);
   readonly aiErrorDetail = signal<string | null>(null);
   readonly aiHistory = signal<AIHistoryItem[]>([]);
+  readonly applyingAi = signal(false);
   readonly voiceSupported = signal(this.detectVoiceSupport());
   readonly recordingSupported = signal(typeof MediaRecorder !== 'undefined' && typeof navigator !== 'undefined');
   readonly aiRecording = signal(false);
@@ -407,7 +408,7 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
 
   private async refreshPolicyIfChanged(): Promise<void> {
     if (!this.policyId || typeof document !== 'undefined' && document.hidden) return;
-    if (this.loading() || this.organizing() || this.aiGenerating() || !!this.dragState) return;
+    if (this.loading() || this.organizing() || this.aiGenerating() || this.applyingAi() || !!this.dragState) return;
     const current = this.policy();
     if (!current) return;
     try {
@@ -950,77 +951,89 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     const suggestion = this.aiSuggestion();
     if (!policy || !suggestion) return;
 
-    if (strategy === 'replace') {
-      const transitions = [...(policy.transitions ?? [])];
-      for (const transition of transitions) {
-        if (transition._id) {
-          await firstValueFrom(this.api.deletePolicyTransition(policy._id, transition._id));
+    this.applyingAi.set(true);
+    this.organizing.set(true);
+    this.aiStatus.set('Aplicando propuesta de IA. El diagrama se pausara un momento para evitar bloqueos.');
+    try {
+      if (strategy === 'replace') {
+        const transitions = [...(policy.transitions ?? [])];
+        for (const transition of transitions) {
+          if (transition._id) {
+            await firstValueFrom(this.api.deletePolicyTransition(policy._id, transition._id));
+          }
+        }
+
+        const nodes = [...(policy.nodes ?? [])];
+        for (const node of nodes) {
+          await firstValueFrom(this.api.deletePolicyNode(policy._id, node.code));
         }
       }
 
-      const nodes = [...(policy.nodes ?? [])];
-      for (const node of nodes) {
-        await firstValueFrom(this.api.deletePolicyNode(policy._id, node.code));
-      }
-    }
+      const latestPolicy =
+        strategy === 'replace'
+          ? (await firstValueFrom(this.api.getPolicy(policy._id))).data
+          : policy;
 
-    const latestPolicy =
-      strategy === 'replace'
-        ? (await firstValueFrom(this.api.getPolicy(policy._id))).data
-        : policy;
-
-    const existingNodes = new Map((latestPolicy.nodes ?? []).map((n) => [n.code, n]));
-    const existing = new Set(existingNodes.keys());
-    for (const node of suggestion.nodes) {
-      if (!existing.has(node.code)) {
-        await firstValueFrom(this.api.addPolicyNode(policy._id, { ...node, form_fields: node.form_fields ?? [] }));
-        existing.add(node.code);
-        existingNodes.set(node.code, {
-          ...node,
-          form_fields: [],
-        });
-      } else {
-        const currentNode = existingNodes.get(node.code);
-        if (
-          currentNode &&
-          (
-            currentNode.name !== node.name ||
-            currentNode.lane !== node.lane ||
-            currentNode.node_type !== node.node_type ||
-            (currentNode.responsible_role ?? null) !== (node.responsible_role ?? null) ||
-            (currentNode.responsible_department ?? null) !== (node.responsible_department ?? null)
-          )
-        ) {
-          await firstValueFrom(
-            this.api.updatePolicyNode(policy._id, node.code, {
-              name: node.name,
-              lane: node.lane,
-              node_type: node.node_type,
-              responsible_role: node.responsible_role ?? null,
-              responsible_department: node.responsible_department ?? null,
-            })
-          );
+      const existingNodes = new Map((latestPolicy.nodes ?? []).map((n) => [n.code, n]));
+      const existing = new Set(existingNodes.keys());
+      for (const node of suggestion.nodes) {
+        if (!existing.has(node.code)) {
+          await firstValueFrom(this.api.addPolicyNode(policy._id, { ...node, form_fields: node.form_fields ?? [] }));
+          existing.add(node.code);
+          existingNodes.set(node.code, {
+            ...node,
+            form_fields: node.form_fields ?? [],
+          });
+        } else {
+          const currentNode = existingNodes.get(node.code);
+          if (
+            currentNode &&
+            (
+              currentNode.name !== node.name ||
+              currentNode.lane !== node.lane ||
+              currentNode.node_type !== node.node_type ||
+              (currentNode.responsible_role ?? null) !== (node.responsible_role ?? null) ||
+              (currentNode.responsible_department ?? null) !== (node.responsible_department ?? null) ||
+              JSON.stringify(currentNode.form_fields ?? []) !== JSON.stringify(node.form_fields ?? [])
+            )
+          ) {
+            await firstValueFrom(
+              this.api.updatePolicyNode(policy._id, node.code, {
+                name: node.name,
+                lane: node.lane,
+                node_type: node.node_type,
+                responsible_role: node.responsible_role ?? null,
+                responsible_department: node.responsible_department ?? null,
+                form_fields: node.form_fields ?? [],
+              })
+            );
+          }
         }
       }
-    }
-    const refreshed = await firstValueFrom(this.api.getPolicy(policy._id));
-    const existingT = new Set(
-      (refreshed.data.transitions ?? []).map(
-        (t) => `${t.source_code}-${t.target_code}-${t.condition_label ?? ''}`
-      )
-    );
-    for (const transition of suggestion.transitions) {
-      const key = `${transition.source_code}-${transition.target_code}-${transition.condition_label ?? ''}`;
-      if (!existingT.has(key)) {
-        await firstValueFrom(this.api.addPolicyTransition(policy._id, transition));
+      const refreshed = await firstValueFrom(this.api.getPolicy(policy._id));
+      const existingT = new Set(
+        (refreshed.data.transitions ?? []).map(
+          (t) => `${t.source_code}-${t.target_code}-${t.condition_label ?? ''}-${t.transition_type}`
+        )
+      );
+      for (const transition of suggestion.transitions) {
+        const key = `${transition.source_code}-${transition.target_code}-${transition.condition_label ?? ''}-${transition.transition_type}`;
+        if (!existingT.has(key)) {
+          await firstValueFrom(this.api.addPolicyTransition(policy._id, transition));
+        }
       }
+      this.toast.success(
+        strategy === 'replace' ? 'Diagrama reemplazado' : 'Propuesta aplicada',
+        strategy === 'replace' ? 'El flujo anterior fue sustituido por la propuesta de IA.' : 'El diagrama se actualizó con la sugerencia de IA'
+      );
+      this.clearLayout(policy._id);
+      const finalPolicy = (await firstValueFrom(this.api.getPolicy(policy._id))).data;
+      this.applyPolicySnapshot(finalPolicy, false);
+      window.setTimeout(() => this.autoOrganize(), 80);
+    } finally {
+      this.organizing.set(false);
+      this.applyingAi.set(false);
     }
-    this.toast.success(
-      strategy === 'replace' ? 'Diagrama reemplazado' : 'Propuesta aplicada',
-      strategy === 'replace' ? 'El flujo anterior fue sustituido por la propuesta de IA.' : 'El diagrama se actualizó con la sugerencia de IA'
-    );
-    this.clearLayout(policy._id);
-    this.loadPolicy(policy._id);
   }
 
   // ----- Canvas -----

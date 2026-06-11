@@ -228,7 +228,7 @@ def _build_prompt(payload: WorkflowSuggestionRequest, transcript: str | None = N
         "No crees transiciones hacia el nodo inicio ni salidas desde el nodo fin.",
         "Debe existir al menos una ruta valida desde inicio hasta fin.",
         "Si no se menciona un inicio o fin explicito, agregalos exactamente una vez.",
-        "Para procesos reales no devuelvas flujos lineales pobres: usa normalmente 8 a 14 nodos, 3 o mas calles, al menos una decision y, si hay validaciones independientes, un fork y un join.",
+        "Para procesos reales no devuelvas flujos lineales pobres: usa normalmente 9 a 13 nodos, 3 o 4 calles, al menos una decision y, si hay validaciones independientes, un fork y un join.",
         "Incluye rutas de excepcion: rechazo, observacion, subsanacion, reintento o cierre negativo cuando tenga sentido.",
         "En cada actividad importante incluye form_fields utiles para el funcionario. Cada key debe ser snake_case y cada options debe ser [] si no aplica.",
         "Si el proceso implica documentos, agrega campos tipo archivo/imagen y nodos de verificacion documental.",
