@@ -178,8 +178,17 @@
 
               <svg class="diagram-svg" [attr.viewBox]="'0 0 1600 ' + diagramHeight()" preserveAspectRatio="none">
                 <defs>
-                  <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
-                    <polygon points="0 0, 10 4, 0 8" class="arrowhead-poly"></polygon>
+                  <marker id="uml-arrow-sequential" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0 0 L 11 5 L 0 10 z" class="arrowhead-poly sequential"></path>
+                  </marker>
+                  <marker id="uml-arrow-alternative" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0 0 L 11 5 L 0 10 z" class="arrowhead-poly alternative"></path>
+                  </marker>
+                  <marker id="uml-arrow-iterative" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0 0 L 11 5 L 0 10 z" class="arrowhead-poly iterative"></path>
+                  </marker>
+                  <marker id="uml-arrow-parallel" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0 0 L 11 5 L 0 10 z" class="arrowhead-poly parallel"></path>
                   </marker>
                 </defs>
                 <ng-container *ngFor="let edge of diagramEdges(); trackBy: trackEdge">
@@ -187,12 +196,12 @@
                     class="edge"
                     [attr.d]="edgePath(edge)"
                     [attr.data-type]="edge.type"
-                    marker-end="url(#arrowhead)"
+                    [attr.marker-end]="'url(#' + markerForTransition(edge.type) + ')'"
                   ></path>
                   <text
                     class="edge-label"
-                    [attr.x]="(edge.fromX + edge.toX) / 2"
-                    [attr.y]="(edge.fromY + edge.toY) / 2 - 10"
+                    [attr.x]="edge.labelX"
+                    [attr.y]="edge.labelY"
                     *ngIf="edge.label"
                   >
                     {{ edge.label }}
@@ -207,17 +216,29 @@
                 [attr.data-type]="node.node_type"
                 [style.left.px]="node.x"
                 [style.top.px]="node.y"
+                [style.width.px]="node.width"
+                [style.height.px]="node.height"
                 (mousedown)="startNodeDrag(node.code, $event, board)"
                 (click)="selectNode(node.code)"
               >
                 <span class="port port-in"></span>
                 <span class="port port-out"></span>
-                <header>
-                  <span class="badge" [ngClass]="badgeForType(node.node_type)">{{ node.node_type }}</span>
-                  <span class="code">{{ node.code }}</span>
-                </header>
-                <strong>{{ node.name }}</strong>
-                <span class="muted tiny">{{ node.lane }}</span>
+                <div class="uml-symbol" [ngSwitch]="node.node_type" aria-hidden="true">
+                  <span *ngSwitchCase="'inicio'" class="uml-initial"></span>
+                  <span *ngSwitchCase="'fin'" class="uml-final"></span>
+                  <span *ngSwitchCase="'decision'" class="uml-decision"></span>
+                  <span *ngSwitchCase="'fork'" class="uml-bar"></span>
+                  <span *ngSwitchCase="'join'" class="uml-bar"></span>
+                  <span *ngSwitchDefault class="uml-action"></span>
+                </div>
+                <div class="uml-content">
+                  <header>
+                    <span class="badge" [ngClass]="badgeForType(node.node_type)">{{ node.node_type }}</span>
+                    <span class="code">{{ node.code }}</span>
+                  </header>
+                  <strong>{{ node.name }}</strong>
+                  <span class="muted tiny">{{ node.lane }}</span>
+                </div>
                 <button
                   type="button"
                   class="card-action"

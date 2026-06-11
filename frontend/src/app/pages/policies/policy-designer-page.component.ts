@@ -21,6 +21,8 @@ interface DiagramNodeView {
   lane: string;
   x: number;
   y: number;
+  width: number;
+  height: number;
 }
 
 interface DiagramEdgeView {
@@ -29,6 +31,8 @@ interface DiagramEdgeView {
   fromY: number;
   toX: number;
   toY: number;
+  labelX: number;
+  labelY: number;
   label: string | null;
   type: string;
 }
@@ -79,6 +83,14 @@ interface TourBubblePosition {
 })
 export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly laneRowHeight = 160;
+  private readonly defaultNodeSize = { width: 200, height: 88 };
+  private readonly umlNodeSizes: Record<string, { width: number; height: number }> = {
+    inicio: { width: 72, height: 72 },
+    fin: { width: 76, height: 76 },
+    decision: { width: 132, height: 112 },
+    fork: { width: 168, height: 46 },
+    join: { width: 168, height: 46 },
+  };
 
   @Input() policyId = '';
   @ViewChild('laneControls') laneControlsRef?: ElementRef<HTMLElement>;
@@ -222,13 +234,16 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     const layout = this.nodeLayout();
     return this.nodes().map((node) => {
       const pos = layout[node.code] ?? this.defaultPosition(node.code, node.lane);
+      const size = this.nodeSize(node.node_type);
       return {
         code: node.code,
         name: node.name,
         node_type: node.node_type,
         lane: node.lane,
         x: pos.x,
-        y: pos.y
+        y: pos.y,
+        width: size.width,
+        height: size.height,
       };
     });
   });
@@ -240,12 +255,16 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
         const from = map.get(t.source_code);
         const to = map.get(t.target_code);
         if (!from || !to) return null;
+        const fromPort = this.edgePort(from, to, 'out');
+        const toPort = this.edgePort(to, from, 'in');
         return {
           id: t._id ?? `edge-${index}`,
-          fromX: from.x + 200,
-          fromY: from.y + 44,
-          toX: to.x,
-          toY: to.y + 44,
+          fromX: fromPort.x,
+          fromY: fromPort.y,
+          toX: toPort.x,
+          toY: toPort.y,
+          labelX: (fromPort.x + toPort.x) / 2,
+          labelY: (fromPort.y + toPort.y) / 2 - 12,
           label: t.condition_label ?? null,
           type: t.transition_type
         };
@@ -1110,6 +1129,15 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     ].join(' ');
   }
 
+  markerForTransition(type: string): string {
+    const map: Record<string, string> = {
+      alternativa: 'uml-arrow-alternative',
+      iterativa: 'uml-arrow-iterative',
+      paralela: 'uml-arrow-parallel',
+    };
+    return map[type] ?? 'uml-arrow-sequential';
+  }
+
   autoOrganize(): void {
     const policy = this.policy();
     if (!policy) return;
@@ -1162,8 +1190,8 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
         usedSlots.set(n.lane, slots);
 
         layout[n.code] = {
-          x: 36 + column * 240,
-          y: this.laneTopForIndex(laneIndex) + 28,
+          x: 52 + column * 250,
+          y: this.laneTopForIndex(laneIndex) + this.nodeLaneOffset(n.node_type),
           lane: n.lane,
         };
       }
@@ -1375,17 +1403,18 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
   }
 
   private defaultPosition(code: string, explicitLane?: string): { x: number; y: number } {
+    const node = this.nodes().find((item) => item.code === code);
     const laneName =
       explicitLane ??
-      this.nodes().find((node) => node.code === code)?.lane ??
+      node?.lane ??
       this.laneNames()[0] ??
       'Sistema';
     const laneIndex = Math.max(0, this.laneNames().indexOf(laneName));
     const laneNodes = this.nodes().filter((node) => node.lane === laneName);
     const indexWithinLane = Math.max(0, laneNodes.findIndex((node) => node.code === code));
     return {
-      x: 36 + indexWithinLane * 240,
-      y: this.laneTopForIndex(laneIndex) + 28
+      x: 52 + indexWithinLane * 250,
+      y: this.laneTopForIndex(laneIndex) + this.nodeLaneOffset(node?.node_type ?? 'actividad')
     };
   }
 
@@ -1420,15 +1449,51 @@ export class PolicyDesignerPageComponent implements OnInit, OnDestroy, AfterView
     const zoom = this.zoomLevel();
     const offset = this.canvasOffset();
     const laneIndex = Math.max(0, this.laneNames().indexOf(node.lane));
-    const laneTop = this.laneTopForIndex(laneIndex) + 24;
+    const size = this.nodeSize(node.node_type);
+    const laneTop = this.laneTopForIndex(laneIndex) + 18;
+    const laneBottom = this.laneTopForIndex(laneIndex) + this.laneRowHeight - size.height - 18;
     const nextX = Math.max(20, (event.clientX - this.dragState.boardLeft - offset.x) / zoom - this.dragState.offsetX);
     const nextY = Math.max(laneTop, (event.clientY - this.dragState.boardTop - offset.y) / zoom - this.dragState.offsetY);
-    const snapped = Math.min(laneTop + 56, Math.max(laneTop, nextY));
+    const snapped = Math.min(Math.max(laneTop, laneBottom), Math.max(laneTop, nextY));
 
       this.nodeLayout.update((layout) => ({
         ...layout,
         [this.dragState!.nodeCode!]: { x: nextX, y: snapped, lane: node.lane }
       }));
+  }
+
+  private nodeSize(type: string): { width: number; height: number } {
+    return this.umlNodeSizes[type] ?? this.defaultNodeSize;
+  }
+
+  private nodeLaneOffset(type: string): number {
+    const size = this.nodeSize(type);
+    return Math.max(18, Math.round((this.laneRowHeight - size.height) / 2));
+  }
+
+  private edgePort(node: DiagramNodeView, other: DiagramNodeView, mode: 'in' | 'out'): { x: number; y: number } {
+    const centerX = node.x + node.width / 2;
+    const centerY = node.y + node.height / 2;
+    const otherCenterX = other.x + other.width / 2;
+    const otherCenterY = other.y + other.height / 2;
+    const dx = otherCenterX - centerX;
+    const dy = otherCenterY - centerY;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      return dx >= 0
+        ? { x: node.x + node.width, y: centerY }
+        : { x: node.x, y: centerY };
+    }
+
+    if (mode === 'out') {
+      return dy >= 0
+        ? { x: centerX, y: node.y + node.height }
+        : { x: centerX, y: node.y };
+    }
+
+    return dy >= 0
+      ? { x: centerX, y: node.y }
+      : { x: centerX, y: node.y + node.height };
   }
 
   private normalizeSuggestionToKnownLanes(suggestion: WorkflowSuggestion): WorkflowSuggestion {
