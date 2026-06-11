@@ -147,3 +147,96 @@ export interface BottleneckData {
   ai_summary?: string;
   ai_source?: string;
 }
+
+export interface DocumentPermission {
+  subject_type: 'role' | 'department' | 'user';
+  subject: string;
+  can_view: boolean;
+  can_upload: boolean;
+  can_version: boolean;
+  can_delete: boolean;
+}
+
+export interface DocumentVersion {
+  _id?: string | null;
+  version_number: number;
+  file_name: string;
+  file_url?: string | null;
+  content_type?: string | null;
+  size_bytes: number;
+  checksum_sha256: string;
+  storage_provider: 'local' | 's3';
+  storage_bucket?: string | null;
+  storage_key: string;
+  change_summary?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+}
+
+export interface DocumentRecord {
+  _id: string;
+  policy_id: string;
+  tramite_code?: string | null;
+  task_id?: string | null;
+  node_code?: string | null;
+  title: string;
+  document_type: string;
+  description?: string | null;
+  properties: Record<string, unknown>;
+  permissions: DocumentPermission[];
+  current_version: number;
+  versions: DocumentVersion[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AuditLog {
+  _id: string;
+  action: string;
+  actor_name?: string | null;
+  policy_id?: string | null;
+  tramite_code?: string | null;
+  task_id?: string | null;
+  document_id?: string | null;
+  version_number?: number | null;
+  summary: string;
+  metadata: Record<string, unknown>;
+  created_at?: string;
+}
+
+export interface RoutingIntelligence {
+  model_type: string;
+  total_tramites: number;
+  total_tasks: number;
+  risk_nodes: Array<{
+    node_code: string;
+    pending: number;
+    observed: number;
+    max_age_hours: number;
+    meta?: { name: string; lane: string; policy: string } | null;
+  }>;
+  priority_recommendations: Array<{
+    task_id: string;
+    tramite_id: string;
+    node_code: string;
+    title: string;
+    risk_score: number;
+    risk_level: string;
+    recommended_action: string;
+  }>;
+  anomalies: Array<{ kind: string; task_id: string; node_code: string; detail: string }>;
+  best_route_recommendation: Array<{ node_code: string; node_name: string; lane: string; reason: string }>;
+}
+
+export interface IntelligentReport {
+  title: string;
+  summary: string;
+  query_plan: string[];
+  recommendations: string[];
+  filters_detected: Record<string, unknown>;
+  source: string;
+  model_type: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  snapshot: RoutingIntelligence;
+}

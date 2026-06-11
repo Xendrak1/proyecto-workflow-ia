@@ -38,6 +38,85 @@
     </div>
   </section>
 
+  <section class="documents card card-pad">
+    <header class="block-head spread">
+      <div>
+        <span class="eyebrow">Repositorio documental</span>
+        <h3>Documentos del cliente y del trámite</h3>
+        <p class="muted tiny">Versionado, permisos por rol/departamento y trazabilidad para auditoría.</p>
+      </div>
+      <span class="badge neutral">{{ documents().length }} archivo(s)</span>
+    </header>
+
+    <div class="document-upload">
+      <label>
+        <span>Título</span>
+        <input type="text" [(ngModel)]="documentTitle" placeholder="Ej. Formulario de apertura" />
+      </label>
+      <label>
+        <span>Descripción</span>
+        <input type="text" [(ngModel)]="documentDescription" placeholder="Propósito o detalle del documento" />
+      </label>
+      <label class="file-field">
+        <span>Archivo</span>
+        <input type="file" (change)="onDocumentFileSelected($event)" />
+      </label>
+      <button type="button" class="btn primary sm" (click)="uploadDocument()" [disabled]="uploadingDocument()">
+        <app-icon name="doc" [size]="14" /> {{ uploadingDocument() ? 'Cargando...' : 'Subir documento' }}
+      </button>
+    </div>
+
+    <div class="document-list" *ngIf="documents().length; else emptyDocuments">
+      <article *ngFor="let document of documents()" class="document-row">
+        <div class="document-main">
+          <header>
+            <strong>{{ document.title }}</strong>
+            <span class="badge neutral">{{ document.document_type }}</span>
+            <span class="badge info">v{{ document.current_version }}</span>
+            <span class="badge" [ngClass]="currentVersion(document)?.storage_provider === 's3' ? 'success' : 'neutral'">
+              {{ currentVersion(document)?.storage_provider || 'local' }}
+            </span>
+          </header>
+          <p class="muted tiny" *ngIf="document.description">{{ document.description }}</p>
+          <span class="muted tiny">
+            {{ currentVersion(document)?.file_name }} · {{ formatBytes(currentVersion(document)?.size_bytes) }}
+          </span>
+        </div>
+        <div class="document-actions">
+          <a class="btn ghost sm" *ngIf="fileUrl(document)" [href]="fileUrl(document)!" target="_blank" rel="noopener">
+            <app-icon name="arrowUpRight" [size]="14" /> Abrir
+          </a>
+          <label class="btn sm">
+            <app-icon name="plus" [size]="14" />
+            {{ versioningDocumentId() === document._id ? 'Subiendo...' : 'Nueva versión' }}
+            <input type="file" (change)="uploadNewVersion(document, $event)" [disabled]="versioningDocumentId() === document._id" />
+          </label>
+        </div>
+      </article>
+    </div>
+    <ng-template #emptyDocuments>
+      <div class="empty subtle">
+        <div class="icon-wrap"><app-icon name="doc" [size]="18" /></div>
+        <strong>Sin documentos cargados</strong>
+        <span class="tiny">Sube PDFs, imágenes, hojas electrónicas o documentos de apoyo.</span>
+      </div>
+    </ng-template>
+
+    <div class="audit-strip" *ngIf="auditLogs().length">
+      <header>
+        <app-icon name="shield" [size]="14" />
+        <strong>Últimos eventos de auditoría</strong>
+      </header>
+      <ol>
+        <li *ngFor="let log of auditLogs().slice(0, 5)">
+          <span class="mono">{{ log.action }}</span>
+          <strong>{{ log.summary }}</strong>
+          <span class="muted tiny">{{ formatDate(log.created_at) }}</span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
   <section class="content-grid">
     <article class="timeline card card-pad">
       <header class="block-head">

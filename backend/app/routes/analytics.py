@@ -6,12 +6,177 @@ from io import StringIO
 from urllib import parse, request, error
 
 from fastapi import APIRouter, Query, Response
+from pydantic import BaseModel, Field
 
 from app.db.mongo import get_database
 from app.core.config import settings
+from app.services.audit_service import record_audit
 
 
 router = APIRouter()
+
+
+class IntelligentReportRequest(BaseModel):
+    prompt: str = Field(min_length=3)
+    date_from: str | None = None
+    date_to: str | None = None
+    actor_name: str | None = None
+
+
+def _risk_level(score: int) -> str:
+    if score >= 75:
+        return "alto"
+    if score >= 45:
+        return "medio"
+    return "bajo"
+
+
+def _task_age_hours(task: dict) -> float:
+    created = task.get("created_at")
+    if not created:
+        return 0
+    if isinstance(created, str):
+        try:
+            created_dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        except ValueError:
+            return 0
+    else:
+        created_dt = created
+    if created_dt.tzinfo is None:
+        created_dt = created_dt.replace(tzinfo=timezone.utc)
+    return max(0, (datetime.now(timezone.utc) - created_dt).total_seconds() / 3600)
+
+
+def _build_intelligence_snapshot(tasks: list[dict], tramites: list[dict], policies: list[dict]) -> dict:
+    node_names: dict[str, dict] = {}
+    transition_counts: dict[str, int] = {}
+    for policy in policies:
+        nodes = policy.get("nodes", [])
+        for node in nodes:
+            node_names[node.get("code")] = {
+                "name": node.get("name"),
+                "lane": node.get("lane"),
+                "policy": policy.get("name"),
+            }
+        for transition in policy.get("transitions", []):
+            key = f"{transition.get('source_code')}->{transition.get('target_code')}"
+            transition_counts[key] = transition_counts.get(key, 0) + 1
+
+    pending_by_node: dict[str, dict] = {}
+    priorities: list[dict] = []
+    anomalies: list[dict] = []
+    for task in tasks:
+        node = task.get("node_code") or "SIN_NODO"
+        age_hours = _task_age_hours(task)
+        bucket = pending_by_node.setdefault(
+            node,
+            {"node_code": node, "pending": 0, "observed": 0, "max_age_hours": 0.0, "meta": node_names.get(node)},
+        )
+        if task.get("status") in {"pendiente", "en_proceso"}:
+            bucket["pending"] += 1
+        if task.get("status") == "observada":
+            bucket["observed"] += 1
+        bucket["max_age_hours"] = max(bucket["max_age_hours"], round(age_hours, 1))
+
+        score = min(100, int(age_hours * 2) + (35 if task.get("status") == "observada" else 0))
+        if task.get("status") in {"pendiente", "en_proceso", "observada"}:
+            priorities.append(
+                {
+                    "task_id": task.get("_id"),
+                    "tramite_id": task.get("tramite_id"),
+                    "node_code": node,
+                    "title": task.get("title"),
+                    "risk_score": score,
+                    "risk_level": _risk_level(score),
+                    "recommended_action": "Atender de inmediato" if score >= 75 else "Monitorear y priorizar en la bandeja",
+                }
+            )
+        if age_hours >= 48 or task.get("status") == "observada":
+            anomalies.append(
+                {
+                    "kind": "demora" if age_hours >= 48 else "observacion",
+                    "task_id": task.get("_id"),
+                    "node_code": node,
+                    "detail": f"Tarea con {round(age_hours, 1)} horas de antiguedad y estado {task.get('status')}.",
+                }
+            )
+
+    nodes = sorted(pending_by_node.values(), key=lambda item: (item["pending"] + item["observed"], item["max_age_hours"]), reverse=True)
+    best_route = [
+        {
+            "node_code": item["node_code"],
+            "node_name": (item.get("meta") or {}).get("name") or item["node_code"],
+            "lane": (item.get("meta") or {}).get("lane") or "Sin calle",
+            "reason": "Nodo critico por acumulacion; conviene reforzar recursos o automatizar validaciones.",
+        }
+        for item in nodes[:5]
+    ]
+    return {
+        "model_type": "deep-learning-simulado-gemini",
+        "total_tramites": len(tramites),
+        "total_tasks": len(tasks),
+        "risk_nodes": nodes[:8],
+        "priority_recommendations": sorted(priorities, key=lambda item: item["risk_score"], reverse=True)[:10],
+        "anomalies": anomalies[:10],
+        "best_route_recommendation": best_route,
+        "transition_patterns": transition_counts,
+    }
+
+
+def _generate_report_with_ai(prompt: str, snapshot: dict) -> tuple[dict, str]:
+    fallback = {
+        "title": "Reporte inteligente operativo",
+        "summary": (
+            f"Se analizaron {snapshot['total_tramites']} tramites y {snapshot['total_tasks']} tareas. "
+            "El reporte prioriza riesgo de demora, carga por nodo y anomalias operativas."
+        ),
+        "query_plan": [
+            "Filtrar tramites y tareas segun el periodo solicitado.",
+            "Agrupar por nodo, departamento y estado.",
+            "Priorizar tareas antiguas u observadas.",
+            "Generar recomendaciones de intervencion.",
+        ],
+        "recommendations": [
+            "Atender primero las tareas con riesgo alto.",
+            "Revisar nodos con observaciones repetidas.",
+            "Reasignar capacidad temporalmente en las calles con mayor cola.",
+        ],
+        "filters_detected": {"prompt": prompt},
+    }
+    if not settings.gemini_api_key:
+        return fallback, "fallback"
+    ai_prompt = "\n".join(
+        [
+            "Eres un analista BI de procesos y debes generar un reporte operacional.",
+            "El usuario puede pedir filtros por fecha, cliente, tramite, estado o nodo.",
+            "Responde SOLO JSON valido con title, summary, query_plan, recommendations y filters_detected.",
+            "No inventes datos fuera del snapshot.",
+            f"Solicitud del usuario: {prompt}",
+            f"Snapshot: {json.dumps(snapshot, ensure_ascii=False, default=str)}",
+        ]
+    )
+    body = {
+        "contents": [{"parts": [{"text": ai_prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.15,
+            "maxOutputTokens": 1200,
+        },
+    }
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_model}:generateContent?key={parse.quote(settings.gemini_api_key)}"
+    req = request.Request(
+        url=endpoint,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=35) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+        text = raw["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(text[text.find("{"): text.rfind("}") + 1]), "gemini"
+    except (error.HTTPError, error.URLError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+        return fallback, "fallback"
 
 
 def _fallback_bottleneck_insight(critical_nodes: list[dict]) -> tuple[str, list[str]]:
@@ -256,3 +421,47 @@ async def export_report(format: str = Query(default="json", pattern="^(json|csv)
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="workflow-report.csv"'},
     )
+
+
+@router.get("/routing-intelligence")
+async def routing_intelligence() -> dict:
+    db = get_database()
+    tasks = await db.tasks.find().to_list(length=1000)
+    tramites = await db.tramites.find().to_list(length=500)
+    policies = await db.policies.find().to_list(length=200)
+    snapshot = _build_intelligence_snapshot(tasks, tramites, policies)
+    await record_audit(
+        action="routing.predicted",
+        summary="Motor inteligente calculo ruta, riesgos, prioridades y anomalias.",
+        metadata={
+            "model_type": snapshot["model_type"],
+            "risk_nodes": len(snapshot["risk_nodes"]),
+            "anomalies": len(snapshot["anomalies"]),
+        },
+    )
+    return {"message": "Prediccion inteligente generada", "data": snapshot}
+
+
+@router.post("/intelligent-report")
+async def intelligent_report(payload: IntelligentReportRequest) -> dict:
+    db = get_database()
+    tasks = await db.tasks.find().to_list(length=1000)
+    tramites = await db.tramites.find().to_list(length=500)
+    policies = await db.policies.find().to_list(length=200)
+    snapshot = _build_intelligence_snapshot(tasks, tramites, policies)
+    report, source = await asyncio.to_thread(_generate_report_with_ai, payload.prompt, snapshot)
+    report_payload = {
+        **report,
+        "source": source,
+        "model_type": snapshot["model_type"],
+        "date_from": payload.date_from,
+        "date_to": payload.date_to,
+        "snapshot": snapshot,
+    }
+    await record_audit(
+        action="report.generated",
+        actor_name=payload.actor_name,
+        summary=f"Reporte inteligente generado: {report_payload.get('title', 'sin titulo')}",
+        metadata={"prompt": payload.prompt, "source": source, "date_from": payload.date_from, "date_to": payload.date_to},
+    )
+    return {"message": "Reporte inteligente generado", "data": report_payload}

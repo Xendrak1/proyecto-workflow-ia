@@ -1,9 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { Component, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../../core/api.service';
-import { BottleneckData, Policy, Summary, Task, Tramite } from '../../core/api.models';
+import { BottleneckData, IntelligentReport, Policy, RoutingIntelligence, Summary, Task, Tramite } from '../../core/api.models';
+import { SessionService } from '../../core/session.service';
 import { ToastService } from '../../core/toast.service';
 import { IconComponent } from '../../shared/icon.component';
 
@@ -31,7 +33,7 @@ interface TourBubblePosition {
 @Component({
   selector: 'app-analytics-page',
   standalone: true,
-  imports: [CommonModule, IconComponent],
+  imports: [CommonModule, FormsModule, IconComponent],
   templateUrl: './analytics-page.component.html',
   styleUrl: './analytics-page.component.scss'
 })
@@ -39,19 +41,24 @@ export class AnalyticsPageComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
   private readonly zone = inject(NgZone);
+  private readonly session = inject(SessionService);
 
   readonly summary = signal<Summary | null>(null);
   readonly bottleneckData = signal<BottleneckData | null>(null);
+  readonly routingIntelligence = signal<RoutingIntelligence | null>(null);
+  readonly intelligentReport = signal<IntelligentReport | null>(null);
   readonly policies = signal<Policy[]>([]);
   readonly tasks = signal<Task[]>([]);
   readonly tramites = signal<Tramite[]>([]);
   readonly loading = signal(true);
   readonly exporting = signal<'csv' | 'json' | null>(null);
+  readonly generatingReport = signal(false);
   readonly tourOpen = signal(false);
   readonly tourIndex = signal(0);
   readonly tourBubble = signal<TourBubblePosition>({ top: 120, left: 120 });
 
   private resizeHandler: (() => void) | null = null;
+  reportPrompt = 'Necesito un reporte de riesgos de demora, prioridades y anomalías por trámite para esta semana.';
   private readonly tourSteps: PageTourStep[] = [
     {
       target: 'analytics-actions',
@@ -180,6 +187,10 @@ export class AnalyticsPageComponent implements OnDestroy {
       if (tramites.status === 'fulfilled') this.tramites.set(tramites.value.data ?? []);
       else hadError = true;
 
+      const intelligence = await firstValueFrom(this.api.getRoutingIntelligence()).catch(() => null);
+      if (intelligence) this.routingIntelligence.set(intelligence.data);
+      else hadError = true;
+
       if (hadError) {
         this.toast.warn('Algunas analíticas tardaron o fallaron', 'Se mostraron los datos que sí pudieron recuperarse.');
       }
@@ -203,6 +214,30 @@ export class AnalyticsPageComponent implements OnDestroy {
       this.toast.error('No se pudo exportar el reporte');
     } finally {
       this.exporting.set(null);
+    }
+  }
+
+  async generateSmartReport(): Promise<void> {
+    const prompt = this.reportPrompt.trim();
+    if (!prompt) {
+      this.toast.warn('Escribe qué reporte necesitas');
+      return;
+    }
+    this.generatingReport.set(true);
+    try {
+      const response = await firstValueFrom(
+        this.api.generateIntelligentReport({
+          prompt,
+          actor_name: this.session.fullName() || this.session.email()
+        })
+      );
+      this.intelligentReport.set(response.data);
+      this.routingIntelligence.set(response.data.snapshot);
+      this.toast.success('Reporte inteligente generado');
+    } catch {
+      this.toast.error('No se pudo generar el reporte inteligente');
+    } finally {
+      this.generatingReport.set(false);
     }
   }
 

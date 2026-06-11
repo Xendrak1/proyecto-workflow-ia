@@ -4,10 +4,14 @@ import { Observable } from 'rxjs';
 
 import {
   ApiResponse,
+  AuditLog,
   BottleneckData,
+  DocumentRecord,
   EvidenceItem,
+  IntelligentReport,
   LoginResponse,
   Policy,
+  RoutingIntelligence,
   Summary,
   Task,
   TaskFormFillSuggestion,
@@ -226,6 +230,74 @@ export class ApiService {
     return this.http.post<ApiResponse<EvidenceItem>>(`${this.baseUrl}/tasks/${taskId}/evidences`, payload);
   }
 
+  // ----- Documents -----
+  listDocuments(filters: {
+    policy_id?: string | null;
+    tramite_code?: string | null;
+    task_id?: string | null;
+    node_code?: string | null;
+  }): Observable<ApiResponse<DocumentRecord[]>> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    const query = params.toString();
+    return this.http.get<ApiResponse<DocumentRecord[]>>(`${this.baseUrl}/documents${query ? `?${query}` : ''}`);
+  }
+
+  createDocument(payload: {
+    policy_id: string;
+    tramite_code?: string | null;
+    task_id?: string | null;
+    node_code?: string | null;
+    title: string;
+    description?: string | null;
+    document_type?: string;
+    properties?: Record<string, unknown>;
+    permissions?: Array<{
+      subject_type: 'role' | 'department' | 'user';
+      subject: string;
+      can_view: boolean;
+      can_upload: boolean;
+      can_version: boolean;
+      can_delete: boolean;
+    }>;
+    file_name: string;
+    file_base64: string;
+    content_type?: string | null;
+    change_summary?: string | null;
+    actor_name?: string | null;
+  }): Observable<ApiResponse<DocumentRecord>> {
+    return this.http.post<ApiResponse<DocumentRecord>>(`${this.baseUrl}/documents`, payload);
+  }
+
+  createDocumentVersion(
+    documentId: string,
+    payload: {
+      file_name: string;
+      file_base64: string;
+      content_type?: string | null;
+      change_summary?: string | null;
+      actor_name?: string | null;
+    }
+  ): Observable<ApiResponse<DocumentRecord>> {
+    return this.http.post<ApiResponse<DocumentRecord>>(`${this.baseUrl}/documents/${documentId}/versions`, payload);
+  }
+
+  listAuditLogs(filters: {
+    policy_id?: string | null;
+    tramite_code?: string | null;
+    document_id?: string | null;
+    action?: string | null;
+  } = {}): Observable<ApiResponse<AuditLog[]>> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    const query = params.toString();
+    return this.http.get<ApiResponse<AuditLog[]>>(`${this.baseUrl}/audit${query ? `?${query}` : ''}`);
+  }
+
   // ----- Analytics -----
   getSummary(): Observable<ApiResponse<Summary>> {
     return this.http.get<ApiResponse<Summary>>(`${this.baseUrl}/analytics/summary`);
@@ -239,5 +311,18 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/analytics/report?format=${format}`, {
       responseType: 'blob'
     });
+  }
+
+  getRoutingIntelligence(): Observable<ApiResponse<RoutingIntelligence>> {
+    return this.http.get<ApiResponse<RoutingIntelligence>>(`${this.baseUrl}/analytics/routing-intelligence`);
+  }
+
+  generateIntelligentReport(payload: {
+    prompt: string;
+    date_from?: string | null;
+    date_to?: string | null;
+    actor_name?: string | null;
+  }): Observable<ApiResponse<IntelligentReport>> {
+    return this.http.post<ApiResponse<IntelligentReport>>(`${this.baseUrl}/analytics/intelligent-report`, payload);
   }
 }

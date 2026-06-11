@@ -53,6 +53,70 @@
     </article>
   </section>
 
+  <section class="smart-grid">
+    <article class="card card-pad smart-panel">
+      <header class="block-head spread">
+        <div>
+          <span class="eyebrow">Motor inteligente</span>
+          <h3>Predicción de rutas, demoras y anomalías</h3>
+          <p class="muted tiny">Modelo simulado con Gemini y heurísticas operativas, preparado para reemplazo por TensorFlow.</p>
+        </div>
+        <span class="badge primary">{{ routingIntelligence()?.model_type || 'pendiente' }}</span>
+      </header>
+
+      <div class="smart-metrics">
+        <div>
+          <span class="muted tiny">Nodos en riesgo</span>
+          <strong>{{ routingIntelligence()?.risk_nodes?.length ?? 0 }}</strong>
+        </div>
+        <div>
+          <span class="muted tiny">Prioridades</span>
+          <strong>{{ routingIntelligence()?.priority_recommendations?.length ?? 0 }}</strong>
+        </div>
+        <div>
+          <span class="muted tiny">Anomalías</span>
+          <strong>{{ routingIntelligence()?.anomalies?.length ?? 0 }}</strong>
+        </div>
+      </div>
+
+      <div class="route-list" *ngIf="routingIntelligence()?.best_route_recommendation?.length; else emptyRouteAi">
+        <article *ngFor="let route of routingIntelligence()?.best_route_recommendation?.slice(0, 4)">
+          <strong>{{ route.node_name }}</strong>
+          <span class="muted tiny mono">{{ route.node_code }} · {{ route.lane }}</span>
+          <p>{{ route.reason }}</p>
+        </article>
+      </div>
+      <ng-template #emptyRouteAi>
+        <div class="empty subtle">
+          <strong>Sin predicciones suficientes</strong>
+        </div>
+      </ng-template>
+    </article>
+
+    <article class="card card-pad smart-report">
+      <header class="block-head">
+        <span class="eyebrow">Reporte por prompt</span>
+        <h3>Consulta operativa con IA</h3>
+        <p class="muted tiny">Pide reportes por fecha, cliente, trámite, nodo, estado o riesgo.</p>
+      </header>
+      <textarea [(ngModel)]="reportPrompt" rows="4"></textarea>
+      <button type="button" class="btn primary sm" (click)="generateSmartReport()" [disabled]="generatingReport()">
+        <app-icon name="sparkles" [size]="14" /> {{ generatingReport() ? 'Generando...' : 'Generar reporte' }}
+      </button>
+
+      <div class="report-result" *ngIf="intelligentReport() as report">
+        <header>
+          <strong>{{ report.title }}</strong>
+          <span class="badge neutral">{{ report.source }}</span>
+        </header>
+        <p>{{ report.summary }}</p>
+        <ul>
+          <li *ngFor="let item of report.recommendations">{{ item }}</li>
+        </ul>
+      </div>
+    </article>
+  </section>
+
   <section class="content-grid" data-tour="analytics-load" [class.tour-focus]="isTourFocus('analytics-load')">
     <article class="card card-pad">
       <header class="block-head spread">

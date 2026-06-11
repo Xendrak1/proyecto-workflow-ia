@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.db.mongo import close_mongo_connection, connect_to_mongo
-from app.routes import ai, analytics, auth, policies, tasks, tramites, users
+from app.routes import ai, analytics, audit, auth, documents, policies, tasks, tramites, users
 
 
 app = FastAPI(
@@ -55,4 +55,6 @@ app.include_router(policies.router, prefix="/api/policies", tags=["Policies"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
 app.include_router(tramites.router, prefix="/api/tramites", tags=["Tramites"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
+app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
+app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
