@@ -36,7 +36,7 @@ fi
 
 echo "==> Actualizando frontend"
 cd "$ROOT_DIR/frontend"
-npm install
+npm ci
 npm run build
 
 echo "==> Actualizando configuracion nginx"
